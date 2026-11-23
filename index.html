@@ -1,0 +1,2455 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ECHO-TYPE: MHJ ONLINE RANKED</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background-color: #050508;
+      color: #e2e8f0;
+      user-select: none;
+      overflow-x: hidden;
+    }
+    .font-cyber {
+      font-family: 'Orbitron', sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, #080c16 0%, #020306 100%);
+      touch-action: none;
+    }
+    .touch-zone {
+      touch-action: none;
+      -webkit-touch-callout: none;
+    }
+    .neon-border {
+      box-shadow: 0 0 22px rgba(0, 255, 204, 0.14), inset 0 0 15px rgba(0, 255, 204, 0.05);
+    }
+    .mhj-glow {
+      box-shadow: 0 0 15px rgba(255, 170, 0, 0.25);
+    }
+    .neon-text {
+      text-shadow: 0 0 12px rgba(0, 255, 204, 0.65);
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4">
+
+  <!-- トップバー：MHJアカウント連携＆ステータス -->
+  <header class="w-full max-w-6xl flex flex-wrap items-center justify-between gap-3 mb-3 bg-slate-900/90 border border-amber-500/40 rounded-xl px-4 py-2.5 backdrop-blur-md mhj-glow">
+    <div class="flex items-center gap-3">
+      <div class="w-3 h-3 rounded-full bg-amber-400 animate-ping"></div>
+      <h1 class="font-cyber text-base sm:text-xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-emerald-300 to-amber-400">
+        ECHO-TYPE <span class="text-[11px] text-amber-300 border border-amber-400/60 bg-amber-500/10 px-2 py-0.5 rounded ml-1">MHJ ONLINE</span>
+      </h1>
+    </div>
+
+    <!-- MHJアカウント情報＆操作パネル -->
+    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+      <!-- 接続ステータスバッジ -->
+      <div id="mhj-status-badge" class="flex items-center gap-1.5 bg-amber-950/70 border border-amber-500/40 text-amber-300 text-xs px-2.5 py-1 rounded-full">
+        <span id="mhj-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span id="mhj-status-text">MHJ CLOUD 接続中...</span>
+      </div>
+
+      <!-- MHJ ID クイック表示・変更 -->
+      <div class="flex items-center gap-1.5 bg-slate-950/90 border border-slate-700 rounded-lg px-2.5 py-1">
+        <span class="text-[11px] font-cyber text-amber-400 font-bold">MHJ ID:</span>
+        <input id="mhj-id-input" type="text" maxlength="14" placeholder="ユーザー名必須"
+          class="bg-transparent text-white font-bold text-xs sm:text-sm w-28 focus:outline-none focus:border-b focus:border-amber-400"
+          title="MHJアカウントID / プレイヤー名" />
+        <button id="mhj-sync-btn" class="text-xs bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 text-amber-300 font-bold px-2 py-0.5 rounded transition">
+          同期
+        </button>
+      </div>
+
+      <!-- MHJログイン / 管理者画面 / SQL設定ボタン -->
+      <button id="open-auth-modal-btn" class="text-xs bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 font-bold px-3 py-1.5 rounded-lg transition">
+        🔑 MHJログイン
+      </button>
+      <button id="open-admin-modal-btn" class="text-xs bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/50 text-rose-300 font-bold px-2.5 py-1.5 rounded-lg transition" title="MHJ管理者ダッシュボード">
+        🛡️ 管理画面
+      </button>
+      <button id="open-sql-modal-btn" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 px-2.5 py-1.5 rounded-lg transition" title="Supabaseテーブル作成SQLを表示">
+        ⚙️ DB設定
+      </button>
+    </div>
+  </header>
+
+  <!-- オンライン対戦状況バー（対戦中のみ表示） -->
+  <div id="versus-hud-bar" class="hidden w-full max-w-6xl mb-3 bg-gradient-to-r from-indigo-950/95 via-slate-900/95 to-rose-950/95 border border-indigo-400/60 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-lg shadow-indigo-500/20">
+    <div class="flex items-center gap-3">
+      <span class="px-2 py-0.5 bg-indigo-500 text-white font-cyber font-black text-[10px] rounded animate-pulse">1vs1 ONLINE BATTLE</span>
+      <span class="text-xs font-mono text-indigo-200">ROOM: <strong id="vs-room-label" class="text-white">----</strong></span>
+    </div>
+    <div class="flex items-center gap-4 text-xs sm:text-sm font-bold">
+      <div class="text-cyan-300">YOU: <span id="vs-my-name">---</span> (Stage <span id="vs-my-stage">1</span>/3)</div>
+      <span class="font-cyber text-amber-400">VS</span>
+      <div class="text-rose-300">RIVAL: <span id="vs-rival-name">対戦相手待機中...</span> (Stage <span id="vs-rival-stage">1</span>/3)</div>
+    </div>
+    <button id="leave-vs-btn" class="text-[11px] bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 px-2.5 py-1 rounded-lg">
+      対戦退出
+    </button>
+  </div>
+
+  <!-- ライブイベント告知バナー（管理画面でイベント開催時に表示） -->
+  <div id="live-event-banner" class="hidden w-full max-w-6xl mb-3 bg-gradient-to-r from-fuchsia-950/90 via-purple-900/90 to-amber-950/90 border border-fuchsia-400/60 rounded-xl px-4 py-2 flex items-center justify-between shadow-lg shadow-fuchsia-500/20">
+    <div class="flex items-center gap-2.5">
+      <span class="px-2 py-0.5 bg-fuchsia-500 text-slate-950 font-cyber font-black text-[10px] rounded animate-pulse">LIVE EVENT</span>
+      <span id="live-event-title" class="font-bold text-xs sm:text-sm text-white">イベント開催中！</span>
+      <span id="live-event-desc" class="hidden sm:inline text-xs text-fuchsia-200">クリスタル短縮効果 2.0倍！</span>
+    </div>
+    <span id="live-event-time" class="text-[11px] font-mono text-amber-300">ACTIVE</span>
+  </div>
+
+  <!-- メインコンテンツ（左：ゲームエリア / 右：リアルタイムMHJランキング） -->
+  <main class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+    <!-- 左側：ゲームエリア (8カラム) -->
+    <section class="lg:col-span-8 flex flex-col gap-2">
+      <!-- HUDステータスバー -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 text-center">
+        <div class="bg-slate-950/70 rounded-lg p-1.5 border border-slate-800">
+          <div class="text-[10px] text-slate-400 font-cyber">STAGE</div>
+          <div class="font-cyber text-base sm:text-lg font-bold text-cyan-400"><span id="stage-num">1</span><span class="text-xs text-slate-500" id="stage-max-label">/5</span></div>
+        </div>
+        <div class="bg-slate-950/70 rounded-lg p-1.5 border border-slate-800">
+          <div class="text-[10px] text-slate-400 font-cyber">STOPWATCH</div>
+          <div class="font-cyber text-base sm:text-lg font-bold text-white" id="timer-display">00.00<span class="text-xs">s</span></div>
+        </div>
+        <div class="bg-slate-950/70 rounded-lg p-1.5 border border-slate-800">
+          <div class="text-[10px] text-slate-400 font-cyber">SPEED / BOOST</div>
+          <div class="font-cyber text-sm sm:text-base font-bold text-amber-400 mt-0.5" id="chain-display">0 CHAIN</div>
+        </div>
+        <div class="bg-slate-950/70 rounded-lg p-1.5 border border-slate-800">
+          <div class="text-[10px] text-slate-400 font-cyber">TACTICAL</div>
+          <div class="text-[11px] font-bold mt-1 flex justify-center gap-1.5">
+            <span class="text-fuchsia-400" title="おとり音波 (E)">DEC:<span id="decoy-count">2</span></span>
+            <span class="text-amber-300" title="EMP凍結 (Q)">EMP:<span id="emp-count">1</span></span>
+            <span class="text-indigo-400" title="妨害ノイズ攻撃 (R)">JAM:<span id="jammer-count">1</span></span>
+          </div>
+        </div>
+        <div class="col-span-2 sm:col-span-1 bg-slate-950/70 rounded-lg p-1.5 border border-slate-800">
+          <div class="text-[10px] text-slate-400 font-cyber">SENSOR</div>
+          <div class="font-cyber text-sm sm:text-base font-bold text-emerald-400 mt-0.5" id="danger-status">SAFE</div>
+        </div>
+      </div>
+
+      <!-- ゲームキャンバスラッパー -->
+      <div id="canvas-wrapper" class="relative w-full aspect-[16/10] rounded-xl overflow-hidden border-2 border-cyan-500/40 neon-border bg-black">
+        <canvas id="game-canvas"></canvas>
+
+        <!-- スタートオーバーレイ -->
+        <div id="start-overlay" class="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 text-center z-20 overflow-y-auto">
+          <div class="text-[11px] font-cyber text-amber-300 bg-amber-950/70 border border-amber-500/40 px-3 py-1 rounded-full mb-2">
+            🏆 LIVE #1 TARGET: <span id="world-first-target" class="font-bold text-white">読込中...</span>
+          </div>
+          <h2 class="font-cyber text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-emerald-300 to-amber-400 mb-1">
+            ECHO-TYPE: MHJ
+          </h2>
+          <p class="text-xs text-slate-300 mb-3">音の波紋だけで暗闇の迷宮を攻略せよ！</p>
+
+          <!-- 必須MHJユーザー名入力欄 -->
+          <div class="w-full max-w-xs mb-3">
+            <input id="start-username-input" type="text" maxlength="14" placeholder="MHJユーザー名を入力 (必須)"
+              class="w-full bg-slate-900 border-2 border-amber-400/70 rounded-xl px-3 py-2 text-sm text-center font-bold text-white focus:border-cyan-400 focus:outline-none" />
+          </div>
+
+          <!-- モード選択（ソロランキング / オンライン対戦 / 練習 / 冒険） -->
+          <div class="w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <!-- ソロタイムアタック -->
+            <div class="bg-slate-900/90 border border-cyan-500/40 rounded-xl p-3 flex flex-col justify-between">
+              <div>
+                <div class="font-cyber text-xs font-bold text-cyan-400 mb-1">🏆 SOLO RANKED</div>
+                <p class="text-[11px] text-slate-400 mb-2">全5ステージ最速クリアで世界ランキング上位を狙う</p>
+              </div>
+              <button id="start-btn" class="w-full font-cyber bg-gradient-to-r from-cyan-500 to-emerald-400 hover:brightness-110 text-slate-950 font-black py-2 rounded-lg text-xs shadow-lg shadow-cyan-500/20 transition">
+                SOLO START [SPACE]
+              </button>
+            </div>
+
+            <!-- オンライン1vs1対戦 -->
+            <div class="bg-slate-900/90 border border-indigo-500/50 rounded-xl p-3 flex flex-col justify-between">
+              <div>
+                <div class="font-cyber text-xs font-bold text-indigo-400 mb-1">⚔️ ONLINE 1vs1 BATTLE</div>
+                <div class="flex gap-1.5 mb-2">
+                  <input id="vs-room-input" type="text" maxlength="10" placeholder="合言葉 (例: 777)" value="MHJ777"
+                    class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-center text-white font-mono uppercase focus:border-indigo-400 focus:outline-none" />
+                </div>
+              </div>
+              <button id="start-vs-btn" class="w-full font-cyber bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 hover:brightness-110 text-white font-black py-2 rounded-lg text-xs shadow-lg shadow-indigo-500/30 transition">
+                オンライン対戦参加
+              </button>
+            </div>
+
+            <!-- 練習モード（ランキング反映なし） -->
+            <div class="bg-slate-900/90 border border-emerald-500/40 rounded-xl p-3 flex flex-col justify-between">
+              <div>
+                <div class="font-cyber text-xs font-bold text-emerald-400 mb-1">🎯 PRACTICE MODE</div>
+                <p class="text-[11px] text-slate-400 mb-2">ランキング反映なし・スキル無限練習＆地形透視ガイド付</p>
+              </div>
+              <button id="start-practice-btn" class="w-full font-cyber bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-slate-950 font-black py-2 rounded-lg text-xs shadow-lg shadow-emerald-500/20 transition">
+                練習モード開始
+              </button>
+            </div>
+
+            <!-- 冒険モード（ストーリー・遺物探索・ボス戦） -->
+            <div class="bg-slate-900/90 border border-amber-500/50 rounded-xl p-3 flex flex-col justify-between">
+              <div>
+                <div class="font-cyber text-xs font-bold text-amber-400 mb-1">🗺️ ADVENTURE QUEST</div>
+                <p class="text-[11px] text-slate-400 mb-2">全10層の深層遺跡を探索！古代遺物収集＆深淵ボス撃破へ</p>
+              </div>
+              <button id="start-adventure-btn" class="w-full font-cyber bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:brightness-110 text-slate-950 font-black py-2 rounded-lg text-xs shadow-lg shadow-amber-500/20 transition">
+                冒険モード出発
+              </button>
+            </div>
+          </div>
+          <div id="vs-waiting-status" class="hidden mt-3 text-xs text-indigo-300 font-bold animate-pulse">
+            📡 対戦ルームに接続中... 同じ合言葉の相手を待っています（1人でもテスト開始可能）
+          </div>
+        </div>
+
+        <!-- ブロック（利用停止）オーバーレイ -->
+        <div id="blocked-overlay" class="hidden absolute inset-0 bg-rose-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-40">
+          <div class="text-4xl mb-2">🚫</div>
+          <h2 class="font-cyber text-2xl sm:text-3xl font-black text-rose-400 mb-2">ACCESS BLOCKED</h2>
+          <p class="text-xs sm:text-sm text-rose-100 max-w-md mb-4 leading-relaxed">
+            あなたのMHJアカウント（<span id="blocked-user-label" class="font-bold underline"></span>）は管理者によりブロックされています。<br>
+            別のMHJユーザー名に切り替えるか、管理者にお問い合わせください。
+          </p>
+          <button id="switch-account-from-block-btn" class="bg-slate-900 hover:bg-slate-800 border border-rose-400 text-rose-200 font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm transition">
+            別のMHJアカウントへ切替
+          </button>
+        </div>
+
+        <!-- ゲームオーバー / クリア結果オーバーレイ -->
+        <div id="result-overlay" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30">
+          <h2 id="result-title" class="font-cyber text-3xl sm:text-4xl font-black mb-2 text-amber-400">RESULT</h2>
+          <p id="result-subtitle" class="text-xs sm:text-sm text-slate-300 mb-4">結果メッセージ</p>
+          <div id="clear-stats-box" class="hidden bg-slate-900/90 border border-amber-500/40 rounded-xl px-6 py-3 mb-4">
+            <div class="text-[11px] text-slate-400 font-cyber">FINAL CLEAR TIME</div>
+            <div id="final-time-display" class="font-cyber text-2xl sm:text-3xl font-black text-cyan-400 my-1">00.00s</div>
+            <div id="record-sync-status" class="text-xs text-emerald-400 font-bold">ランキング同期中...</div>
+          </div>
+          <button id="retry-btn" class="font-cyber bg-gradient-to-r from-cyan-500 to-emerald-400 hover:brightness-110 text-slate-950 font-black px-8 py-3 rounded-xl text-sm shadow-lg shadow-cyan-500/20 transition">
+            PLAY AGAIN [SPACE]
+          </button>
+        </div>
+      </div>
+
+      <!-- コントロールガイド＆スマホ・タブレット操作パッド -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-3">
+        <!-- スマホ・タブレット専用 バーチャルゲームパッド -->
+        <div class="flex items-center justify-between gap-3 sm:gap-6 bg-slate-950/80 border border-slate-800/90 rounded-xl p-3 touch-zone">
+          <!-- 左手：360度バーチャルアナログスティック -->
+          <div class="flex flex-col items-center gap-1">
+            <div id="virtual-joystick-base" class="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-900/95 border-2 border-cyan-500/40 flex items-center justify-center shadow-inner">
+              <div class="w-12 h-12 rounded-full border border-slate-700/60 pointer-events-none"></div>
+              <div id="virtual-joystick-knob" class="absolute w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-cyan-400 to-emerald-500 shadow-lg shadow-cyan-500/40 pointer-events-none transition-transform duration-75"></div>
+            </div>
+            <span class="text-[10px] font-cyber text-slate-400">MOVE STICK</span>
+          </div>
+
+          <!-- 中央ヒント（タブレット・PC向け） -->
+          <div class="hidden md:block text-xs text-slate-400 leading-relaxed text-center">
+            <div><span class="text-slate-200 font-bold">移動:</span> スティック / 画面スワイプ / WASD</div>
+            <div><span class="text-cyan-400 font-bold">音波:</span> 画面タップ または 右側ボタン</div>
+          </div>
+
+          <!-- 右手：大型アクションボタン群 -->
+          <div class="grid grid-cols-3 gap-2 flex-1 max-w-xs sm:max-w-sm">
+            <button id="btn-sonar-big" class="col-span-2 bg-cyan-500/25 active:bg-cyan-500/60 border-2 border-cyan-400 text-cyan-200 text-xs sm:text-sm font-black py-3.5 px-2 rounded-xl shadow-md shadow-cyan-500/10 select-none">
+              📡 大音波
+            </button>
+            <button id="btn-sonar-small" class="bg-sky-500/25 active:bg-sky-500/60 border border-sky-400 text-sky-200 text-xs font-bold py-3.5 px-2 rounded-xl select-none">
+              👣 静音
+            </button>
+            <button id="btn-decoy" class="bg-fuchsia-500/25 active:bg-fuchsia-500/60 border border-fuchsia-400 text-fuchsia-200 text-xs font-bold py-3 px-2 rounded-xl select-none">
+              🎭 おとり
+            </button>
+            <button id="btn-emp" class="bg-amber-500/25 active:bg-amber-500/60 border border-amber-400 text-amber-200 text-xs font-bold py-3 px-2 rounded-xl select-none">
+              ⚡ EMP
+            </button>
+            <button id="btn-jammer" class="bg-indigo-500/25 active:bg-indigo-500/60 border border-indigo-400 text-indigo-200 text-xs font-bold py-3 px-2 rounded-xl select-none">
+              🌀 妨害
+            </button>
+          </div>
+        </div>
+
+        <div class="text-[11px] text-slate-400 text-center">
+          PCキー操作: <span class="text-slate-200">WASD/矢印</span>(移動) ｜ <span class="text-cyan-400">SPACE</span>(大音波) ｜ <span class="text-sky-400">SHIFT</span>(静音) ｜ <span class="text-fuchsia-400">E</span>(おとり) ｜ <span class="text-amber-400">Q</span>(EMP) ｜ <span class="text-indigo-400">R</span>(妨害)
+        </div>
+      </div>
+    </section>
+
+    <!-- 右側：リアルタイムMHJ世界ランキング (4カラム) -->
+    <aside class="lg:col-span-4 bg-slate-900/90 border border-amber-500/30 rounded-xl p-4 flex flex-col gap-3 neon-border">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+        <div class="flex items-center gap-2">
+          <span class="text-amber-400 text-lg">🏆</span>
+          <h2 class="font-cyber font-bold text-sm sm:text-base text-white tracking-wider">MHJ WORLD RANKING</h2>
+        </div>
+        <span id="live-sync-pill" class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full animate-pulse">
+          LIVE SYNC
+        </span>
+      </div>
+
+      <!-- ログイン中MHJアカウントの自己ベスト表示 -->
+      <div class="bg-slate-950/90 border border-amber-500/30 rounded-lg p-2.5 flex items-center justify-between">
+        <div>
+          <div class="text-[10px] text-amber-400 font-bold">現在のMHJアカウント自己ベスト</div>
+          <div class="text-xs font-bold text-white" id="my-mhj-best-name">未設定</div>
+        </div>
+        <div class="text-right">
+          <div class="font-cyber text-base font-bold text-cyan-400" id="my-mhj-best-time">--.--s</div>
+          <div class="text-[10px] text-slate-400" id="my-mhj-rank-label">順位: 圏外</div>
+        </div>
+      </div>
+
+      <!-- ランキングリスト -->
+      <div class="overflow-y-auto max-h-[340px] pr-1">
+        <ul id="ranking-list" class="flex flex-col gap-1.5 text-xs sm:text-sm">
+          <li class="text-center text-slate-500 py-8">MHJサーバーからランキング取得中...</li>
+        </ul>
+      </div>
+
+      <!-- 攻略ヒント -->
+      <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 text-[11px] text-slate-400 space-y-1">
+        <div class="text-amber-300 font-bold">⚡ タイム短縮のテクニック</div>
+        <p>・<span class="text-amber-300 font-bold">ゴールドクリスタル</span>連続回収で <span class="text-white">-3.00s → -3.50s → -4.00s</span> と短縮ボーナスが増加！</p>
+        <p>・赤い<span class="text-rose-400 font-bold">レーザーセンサー</span>は周期でON/OFFが切り替わります。</p>
+      </div>
+    </aside>
+  </main>
+
+  <!-- MHJアカウント認証モーダル -->
+  <div id="auth-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-amber-500/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-cyber text-lg font-bold text-amber-400">MHJ ACCOUNT CONNECT</h3>
+        <button id="close-auth-modal" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+        MHJアカウント（メール＆パスワード）でログインすると、どの端末からでも同じMHJ IDでリアルタイムランキングに記録を連動できます。
+      </p>
+
+      <div id="logged-in-view" class="hidden bg-slate-950 border border-emerald-500/40 rounded-xl p-4 mb-4">
+        <div class="text-xs text-emerald-400 font-bold mb-1">✅ MHJアカウント認証済み</div>
+        <div class="text-sm text-white font-mono mb-3" id="auth-user-email">user@example.com</div>
+        <button id="logout-btn" class="w-full bg-rose-500/20 hover:bg-rose-500/40 border border-rose-500/50 text-rose-300 text-xs font-bold py-2 rounded-lg transition">
+          ログアウトしてゲストIDに戻る
+        </button>
+      </div>
+
+      <form id="auth-form" class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">MHJ ユーザー名（必須・ランキング表示名）</label>
+          <input id="auth-mhj-name" type="text" maxlength="14" placeholder="必ずユーザー名を入力してください" required
+            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">メールアドレス</label>
+          <input id="auth-email" type="email" placeholder="mhj@example.com" required
+            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">パスワード（6文字以上）</label>
+          <input id="auth-password" type="password" minlength="6" placeholder="••••••••" required
+            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-400 focus:outline-none" />
+        </div>
+        <div id="auth-feedback" class="text-xs text-amber-300 min-h-[16px]"></div>
+        <div class="grid grid-cols-2 gap-2 pt-2">
+          <button type="submit" data-mode="login" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 rounded-lg text-xs sm:text-sm transition">
+            ログイン
+          </button>
+          <button type="button" id="signup-btn" class="bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400 text-cyan-300 font-bold py-2.5 rounded-lg text-xs sm:text-sm transition">
+            新規MHJ登録
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MHJ 管理者ダッシュボードモーダル -->
+  <div id="admin-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+    <div class="bg-slate-900 border border-rose-500/50 rounded-2xl p-5 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-rose-400 text-xl">🛡️</span>
+          <h3 class="font-cyber text-base sm:text-lg font-bold text-rose-400">MHJ ADMIN CONTROL CENTER</h3>
+        </div>
+        <button id="close-admin-modal" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <!-- 管理者パスワード認証フォーム -->
+      <div id="admin-login-section" class="max-w-sm mx-auto py-6 text-center">
+        <p class="text-xs text-slate-300 mb-3">管理者パスワードを入力してください</p>
+        <input id="admin-password-input" type="password" placeholder="管理者パスワード"
+          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-center text-white mb-3 focus:border-rose-400 focus:outline-none" />
+        <div id="admin-auth-error" class="text-xs text-rose-400 mb-3 min-h-[16px]"></div>
+        <button id="admin-unlock-btn" class="w-full bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold py-2.5 rounded-lg text-sm transition">
+          管理画面ロック解除
+        </button>
+      </div>
+
+      <!-- 認証後の管理者ダッシュボード本体 -->
+      <div id="admin-dashboard-section" class="hidden space-y-5">
+        <!-- 1. ライブイベント開催コントロール -->
+        <div class="bg-slate-950/90 border border-fuchsia-500/40 rounded-xl p-4">
+          <h4 class="font-cyber text-xs font-bold text-fuchsia-400 mb-3">🎉 LIVE EVENT CONTROL（イベント開催・終了）</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
+            <input id="admin-event-title" type="text" placeholder="イベント名 (例: 週末スピード祭り)" value="MHJ ゴールデンタイムフェス"
+              class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-fuchsia-400 focus:outline-none" />
+            <select id="admin-event-type" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-fuchsia-400 focus:outline-none">
+              <option value="crystal_x2">クリスタル短縮 2.0倍イベント</option>
+              <option value="emp_plus">初期EMP +1個 支給イベント</option>
+              <option value="nightmare">ナイトメア挑戦祭 (敵速度UP)</option>
+            </select>
+            <div class="flex gap-2">
+              <button id="admin-start-event-btn" class="flex-1 bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-2 rounded-lg text-xs transition">
+                イベント開催
+              </button>
+              <button id="admin-stop-event-btn" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 font-bold px-3 py-2 rounded-lg text-xs transition">
+                終了
+              </button>
+            </div>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            現在の開催状態: <span id="admin-current-event-status" class="text-emerald-400 font-bold">開催なし</span>
+          </div>
+        </div>
+
+        <!-- 2. リアルタイムプレイヤー監視リスト（誰が何時にプレイしているか） -->
+        <div class="bg-slate-950/90 border border-cyan-500/30 rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-cyber text-xs font-bold text-cyan-400">📡 REALTIME PLAYER MONITOR（プレイ時間・状況監視）</h4>
+            <span class="text-[10px] text-slate-400">誰が何時にプレイ中かを自動記録</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-800 text-slate-400">
+                  <th class="py-2 px-2">MHJユーザー名</th>
+                  <th class="py-2 px-2">プレイ開始 / 最終時刻</th>
+                  <th class="py-2 px-2">現在状況</th>
+                  <th class="py-2 px-2 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="admin-monitor-tbody" class="divide-y divide-slate-800/70">
+                <tr><td colspan="4" class="py-4 text-center text-slate-500">監視データ読込中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. ブロック（利用停止）アカウント管理 -->
+        <div class="bg-slate-950/90 border border-rose-500/30 rounded-xl p-4">
+          <h4 class="font-cyber text-xs font-bold text-rose-400 mb-3">🚫 BLOCKED USERS（ブロック管理）</h4>
+          <div class="flex gap-2 mb-3">
+            <input id="admin-block-username-input" type="text" placeholder="ブロックするMHJユーザー名を入力"
+              class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:border-rose-400 focus:outline-none" />
+            <button id="admin-add-block-btn" class="bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition">
+              ブロック実行
+            </button>
+          </div>
+          <div id="admin-blocked-list" class="flex flex-wrap gap-2 text-xs">
+            <span class="text-slate-500">ブロック中のユーザーはいません</span>
+          </div>
+        </div>
+
+        <!-- 4. ランキングデータ管理 -->
+        <div class="bg-slate-950/90 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div>
+            <h4 class="font-cyber text-xs font-bold text-amber-400">🏆 RANKING DATA RESET（ランキング初期化）</h4>
+            <p class="text-[11px] text-slate-400 mt-0.5">すべてのランキング記録（CPUダミー記録含む）を完全に消去して0件にリセットします。</p>
+          </div>
+          <button id="admin-reset-ranking-btn" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs whitespace-nowrap transition">
+            ランキング全消去
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase テーブルセットアップSQLモーダル -->
+  <div id="sql-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-cyan-500/50 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-cyber text-base font-bold text-cyan-400">SUPABASE REALTIME TABLE SETUP</h3>
+        <button id="close-sql-modal" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-3 leading-relaxed">
+        Supabaseの「SQL Editor」で以下のSQLを実行すると、ランキング・リアルタイム監視・ブロック・イベントが全端末間で同期されます。
+      </p>
+      <pre id="sql-code-block" class="bg-slate-950 border border-slate-800 rounded-lg p-3 text-[11px] text-emerald-300 font-mono overflow-x-auto select-all mb-3 max-h-60">CREATE TABLE IF NOT EXISTS public.echo_rankings (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  mhj_id text UNIQUE NOT NULL,
+  time_sec numeric(6,2) NOT NULL,
+  stage_reached int DEFAULT 5,
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.mhj_sessions (
+  mhj_id text PRIMARY KEY,
+  started_at text NOT NULL,
+  last_seen text NOT NULL,
+  status text NOT NULL,
+  is_blocked boolean DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS public.mhj_events (
+  id int PRIMARY KEY DEFAULT 1,
+  is_active boolean DEFAULT false,
+  title text,
+  event_type text,
+  started_at text
+);
+
+CREATE TABLE IF NOT EXISTS public.mhj_vs_rooms (
+  room_id text NOT NULL,
+  mhj_id text NOT NULL,
+  stage int DEFAULT 1,
+  x numeric DEFAULT 50,
+  y numeric DEFAULT 250,
+  finished boolean DEFAULT false,
+  finish_time numeric(6,2) DEFAULT 0,
+  jammer_attack_at bigint DEFAULT 0,
+  updated_at timestamptz DEFAULT now(),
+  PRIMARY KEY (room_id, mhj_id)
+);
+
+ALTER TABLE public.echo_rankings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mhj_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mhj_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mhj_vs_rooms ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public all rankings" ON public.echo_rankings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public all sessions" ON public.mhj_sessions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public all events" ON public.mhj_events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public all vs rooms" ON public.mhj_vs_rooms FOR ALL USING (true) WITH CHECK (true);</pre>
+      <button id="copy-sql-btn" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-2 rounded-lg text-xs transition">
+        📋 SQLコードをコピーする
+      </button>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast-box" class="fixed bottom-4 right-4 bg-slate-900 border border-amber-400 text-amber-200 text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+    通知
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. Supabase & MHJアカウント連動モジュール
+    // ==========================================
+    const SUPABASE_URL = 'https://qxiebyajyiciopbjuqep.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_Z0lg2NfZ4EXHHJK_LBXJXA_u-kTTyN0';
+    const ADMIN_PASS = 'Mario1012Hama0108';
+
+    let supabaseClient = null;
+    let currentAuthUser = null;
+    let isCloudTableReady = false;
+    let isAdminUnlocked = false;
+    let pollingIntervalId = null;
+
+    const LOCAL_MHJ_ID_KEY = 'mhj_account_id_v2';
+    const LOCAL_SCORES_KEY = 'mhj_echo_local_scores_v1';
+    const LOCAL_SESSIONS_KEY = 'mhj_local_sessions_v1';
+    const LOCAL_BLOCKS_KEY = 'mhj_local_blocks_v1';
+    const LOCAL_EVENT_KEY = 'mhj_local_event_v1';
+    const LOCAL_VS_KEY = 'mhj_local_vs_rooms_v1';
+
+    let currentMhjId = localStorage.getItem(LOCAL_MHJ_ID_KEY) || '';
+    let sessionStartTimeStr = formatDateTimeJP(new Date());
+    let monitoredSessions = [];
+    let blockedUsersList = JSON.parse(localStorage.getItem(LOCAL_BLOCKS_KEY) || '[]');
+    let activeEvent = null;
+
+    // ゲームモード管理 ('solo' | 'versus' | 'practice' | 'adventure')
+    let gameMode = 'solo';
+    let adventureRelics = 0;
+    let adventureLogs = [];
+    let relicItem = null;
+    let bossEntity = null;
+    let practicePeek = false;
+
+    // オンライン対戦状態
+    let isVersusMode = false;
+    let vsRoomId = '';
+    let rivalState = null;
+    let lastHandledJammerTimestamp = 0;
+    let jammerBlindTimer = 0;
+    let speedBoostTimer = 0;
+    let jammerCount = 1;
+    let vsSyncTimer = 0;
+
+    let leaderboardData = [];
+    const defaultRivals = [];
+
+    function formatDateTimeJP(date) {
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const hh = String(date.getHours()).padStart(2, '0');
+      const mm = String(date.getMinutes()).padStart(2, '0');
+      const ss = String(date.getSeconds()).padStart(2, '0');
+      return `${m}/${d} ${hh}:${mm}:${ss}`;
+    }
+
+    function showToast(message) {
+      const box = document.getElementById('toast-box');
+      box.textContent = message;
+      box.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => box.classList.add('translate-y-20', 'opacity-0'), 3000);
+    }
+
+    function ensureMhjUsername() {
+      const topVal = document.getElementById('mhj-id-input').value.trim();
+      const startVal = document.getElementById('start-username-input').value.trim();
+      const chosen = startVal || topVal || currentMhjId;
+      if (!chosen) {
+        showToast('⚠️ プレイする前にMHJユーザー名を入力してください！');
+        document.getElementById('start-username-input').focus();
+        return false;
+      }
+      if (chosen !== currentMhjId) {
+        currentMhjId = chosen;
+        sessionStartTimeStr = formatDateTimeJP(new Date());
+        localStorage.setItem(LOCAL_MHJ_ID_KEY, currentMhjId);
+        updateMhjAccountUI();
+      }
+      return true;
+    }
+
+    function updateMhjAccountUI() {
+      document.getElementById('mhj-id-input').value = currentMhjId;
+      document.getElementById('start-username-input').value = currentMhjId;
+      document.getElementById('my-mhj-best-name').textContent = currentMhjId || '未設定（ユーザー名を入力）';
+      document.getElementById('auth-mhj-name').value = currentMhjId;
+      checkIfCurrentUserBlocked();
+      renderLeaderboard();
+    }
+
+    function checkIfCurrentUserBlocked() {
+      const overlay = document.getElementById('blocked-overlay');
+      if (currentMhjId && blockedUsersList.includes(currentMhjId)) {
+        document.getElementById('blocked-user-label').textContent = currentMhjId;
+        overlay.classList.remove('hidden');
+        if (gameState === 'PLAYING') {
+          gameState = 'BLOCKED';
+        }
+      } else {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    async function initSupabaseConnection() {
+      updateMhjAccountUI();
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+          realtime: {
+            transport: class DisabledWebSocket {
+              constructor() {
+                this.readyState = 3;
+              }
+              send() {}
+              close() {}
+            }
+          }
+        });
+
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (session && session.user) {
+          handleAuthSession(session.user);
+        }
+
+        supabaseClient.auth.onAuthStateChange((_event, session) => {
+          if (session && session.user) {
+            handleAuthSession(session.user);
+          } else {
+            currentAuthUser = null;
+            document.getElementById('logged-in-view').classList.add('hidden');
+            document.getElementById('auth-form').classList.remove('hidden');
+          }
+        });
+
+        await syncAllCloudData();
+        subscribeRealtimeLeaderboard();
+      } catch (err) {
+        console.warn('Supabase init fallback:', err);
+        setConnectionStatus(false, 'MHJ LOCAL MODE');
+        loadFallbackData();
+      }
+    }
+    async function syncAllCloudData() {
+      await fetchLeaderboard();
+      await reportAndFetchMonitoring();
+      await fetchLiveEventState();
+      if (isVersusMode) {
+        await syncVersusRoomState();
+      }
+    }
+
+    async function fetchLeaderboard() {
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('echo_rankings')
+            .select('*')
+            .order('time_sec', { ascending: true })
+            .limit(20);
+
+          if (!error && data) {
+            isCloudTableReady = true;
+            setConnectionStatus(true, currentAuthUser ? `MHJ認証済: ${currentMhjId}` : 'MHJ CLOUD LIVE');
+            leaderboardData = data.length > 0 ? data : [...defaultRivals];
+            renderLeaderboard();
+            return;
+          }
+        } catch (err) {
+          console.warn('Leaderboard fetch fallback:', err);
+        }
+      }
+      isCloudTableReady = false;
+      setConnectionStatus(false, 'MHJ LOCAL SYNC');
+      const saved = localStorage.getItem(LOCAL_SCORES_KEY);
+      leaderboardData = saved ? JSON.parse(saved) : [...defaultRivals];
+      renderLeaderboard();
+    }
+
+    function subscribeRealtimeLeaderboard() {
+      if (!supabaseClient || pollingIntervalId) return;
+
+      pollingIntervalId = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          syncAllCloudData();
+        }
+      }, 4000);
+    }
+
+    function loadFallbackData() {
+      const saved = localStorage.getItem(LOCAL_SCORES_KEY);
+      leaderboardData = saved ? JSON.parse(saved) : [...defaultRivals];
+      renderLeaderboard();
+      reportAndFetchMonitoring();
+      fetchLiveEventState();
+    }
+
+    function handleAuthSession(user) {
+      currentAuthUser = user;
+      const metaName = user.user_metadata && user.user_metadata.mhj_id;
+      if (metaName) {
+        currentMhjId = metaName;
+        localStorage.setItem(LOCAL_MHJ_ID_KEY, currentMhjId);
+        updateMhjAccountUI();
+      }
+      document.getElementById('auth-user-email').textContent = `${user.email} (${currentMhjId || '未設定'})`;
+      document.getElementById('logged-in-view').classList.remove('hidden');
+      document.getElementById('auth-form').classList.add('hidden');
+      setConnectionStatus(true, `MHJ認証済: ${currentMhjId || user.email}`);
+    }
+
+    function setConnectionStatus(online, label) {
+      const dot = document.getElementById('mhj-status-dot');
+      const text = document.getElementById('mhj-status-text');
+      const pill = document.getElementById('live-sync-pill');
+      text.textContent = label;
+      if (online) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+        pill.textContent = 'REALTIME LIVE';
+        pill.className = 'text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full animate-pulse';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+        pill.textContent = 'LOCAL SYNC';
+        pill.className = 'text-[10px] bg-amber-950 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full';
+      }
+    }
+
+    async function submitScoreToMhj(clearTime) {
+      const statusEl = document.getElementById('record-sync-status');
+      const formatted = Number(clearTime.toFixed(2));
+
+      if (supabaseClient && isCloudTableReady) {
+        try {
+          const { data: existing } = await supabaseClient
+            .from('echo_rankings')
+            .select('time_sec')
+            .eq('mhj_id', currentMhjId)
+            .maybeSingle();
+
+          if (existing && Number(existing.time_sec) <= formatted) {
+            statusEl.textContent = `自己ベスト (${Number(existing.time_sec).toFixed(2)}s) には及ばず！`;
+            return;
+          }
+
+          const { error } = await supabaseClient
+            .from('echo_rankings')
+            .upsert({
+              mhj_id: currentMhjId,
+              time_sec: formatted,
+              stage_reached: 5
+            }, { onConflict: 'mhj_id' });
+
+          if (error) throw error;
+          statusEl.textContent = '🎉 MHJ世界ランキングにリアルタイム反映完了！';
+          showToast(`🏆 ${currentMhjId} の新記録 (${formatted.toFixed(2)}s) を送信しました！`);
+          await fetchLeaderboard();
+          return;
+        } catch (err) {
+          console.error('Supabase upsert error:', err);
+        }
+      }
+
+      // フォールバック（ローカルランキング保存）
+      const list = [...leaderboardData];
+      const idx = list.findIndex(item => item.mhj_id === currentMhjId);
+      if (idx >= 0) {
+        if (Number(list[idx].time_sec) <= formatted) {
+          statusEl.textContent = `自己ベスト (${Number(list[idx].time_sec).toFixed(2)}s) には及ばず！`;
+          return;
+        }
+        list[idx].time_sec = formatted;
+      } else {
+        list.push({ mhj_id: currentMhjId, time_sec: formatted, stage_reached: 5 });
+      }
+      leaderboardData = list;
+      localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(list));
+      renderLeaderboard();
+      statusEl.textContent = '✅ MHJアカウント記録を更新しました！';
+      showToast(`🏆 新記録 ${formatted.toFixed(2)}s を登録しました！`);
+    }
+
+    async function reportAndFetchMonitoring() {
+      const nowStr = formatDateTimeJP(new Date());
+      const modeMap = {
+        versus: `[対戦:${vsRoomId}] `,
+        practice: '[練習モード] ',
+        adventure: `[冒険・遺物${adventureRelics}] `,
+        solo: ''
+      };
+      const modeTag = modeMap[gameMode] || '';
+      const statusStr = gameState === 'PLAYING' ? `${modeTag}プレイ中 (Stage ${stage})` : 'ロビー待機中';
+
+      if (supabaseClient && isCloudTableReady) {
+        try {
+          if (currentMhjId) {
+            await supabaseClient.from('mhj_sessions').upsert({
+              mhj_id: currentMhjId,
+              started_at: sessionStartTimeStr,
+              last_seen: nowStr,
+              status: statusStr
+            }, { onConflict: 'mhj_id' });
+          }
+
+          const { data: sessions } = await supabaseClient
+            .from('mhj_sessions')
+            .select('*')
+            .order('last_seen', { ascending: false });
+
+          if (sessions) {
+            monitoredSessions = sessions;
+            blockedUsersList = sessions.filter(s => s.is_blocked).map(s => s.mhj_id);
+            checkIfCurrentUserBlocked();
+            if (isAdminUnlocked) renderAdminTables();
+            return;
+          }
+        } catch (err) {
+          console.warn('Monitoring sync fallback:', err);
+        }
+      }
+
+      // ローカル監視フォールバック
+      const localBlocks = JSON.parse(localStorage.getItem(LOCAL_BLOCKS_KEY) || '[]');
+      blockedUsersList = localBlocks;
+      const localSessions = JSON.parse(localStorage.getItem(LOCAL_SESSIONS_KEY) || '{}');
+      if (currentMhjId) {
+        localSessions[currentMhjId] = {
+          mhj_id: currentMhjId,
+          started_at: sessionStartTimeStr,
+          last_seen: nowStr,
+          status: statusStr,
+          is_blocked: localBlocks.includes(currentMhjId)
+        };
+        localStorage.setItem(LOCAL_SESSIONS_KEY, JSON.stringify(localSessions));
+      }
+      monitoredSessions = Object.values(localSessions);
+      checkIfCurrentUserBlocked();
+      if (isAdminUnlocked) renderAdminTables();
+    }
+
+    async function fetchLiveEventState() {
+      if (supabaseClient && isCloudTableReady) {
+        try {
+          const { data } = await supabaseClient
+            .from('mhj_events')
+            .select('*')
+            .eq('id', 1)
+            .maybeSingle();
+
+          if (data) {
+            activeEvent = data;
+            applyLiveEventUI();
+            return;
+          }
+        } catch (err) {}
+      }
+      const savedEvent = localStorage.getItem(LOCAL_EVENT_KEY);
+      activeEvent = savedEvent ? JSON.parse(savedEvent) : null;
+      applyLiveEventUI();
+    }
+
+    function applyLiveEventUI() {
+      const banner = document.getElementById('live-event-banner');
+      const adminStatus = document.getElementById('admin-current-event-status');
+      if (activeEvent && activeEvent.is_active) {
+        banner.classList.remove('hidden');
+        document.getElementById('live-event-title').textContent = activeEvent.title || 'MHJ 特別イベント';
+        const descMap = {
+          crystal_x2: 'クリスタル短縮 2.0倍！',
+          emp_plus: '開始時 EMP +1個支給！',
+          nightmare: 'ナイトメア挑戦祭（敵速度UP）！'
+        };
+        document.getElementById('live-event-desc').textContent = descMap[activeEvent.event_type] || '';
+        document.getElementById('live-event-time').textContent = `${activeEvent.started_at || ''} 開催`;
+        if (adminStatus) adminStatus.textContent = `開催中: ${activeEvent.title} (${descMap[activeEvent.event_type] || ''})`;
+      } else {
+        banner.classList.add('hidden');
+        if (adminStatus) adminStatus.textContent = '開催なし';
+      }
+    }
+
+    function renderLeaderboard() {
+      const sorted = [...leaderboardData].sort((a, b) => Number(a.time_sec) - Number(b.time_sec));
+      const ul = document.getElementById('ranking-list');
+      ul.innerHTML = '';
+
+      if (sorted.length > 0) {
+        document.getElementById('world-first-target').textContent = `${sorted[0].mhj_id} (${Number(sorted[0].time_sec).toFixed(2)}s)`;
+      } else {
+        document.getElementById('world-first-target').textContent = '記録なし（あなたが最初の1位に！）';
+      }
+
+      const myIndex = sorted.findIndex(item => item.mhj_id === currentMhjId);
+      if (myIndex >= 0) {
+        document.getElementById('my-mhj-best-time').textContent = `${Number(sorted[myIndex].time_sec).toFixed(2)}s`;
+        document.getElementById('my-mhj-rank-label').textContent = `現在 ${myIndex + 1}位 / ${sorted.length}人中`;
+      } else {
+        document.getElementById('my-mhj-best-time').textContent = '--.--s';
+        document.getElementById('my-mhj-rank-label').textContent = '順位: 未登録';
+      }
+
+      if (sorted.length === 0) {
+        ul.innerHTML = '<li class="text-center text-slate-500 py-8 text-xs">まだランキング記録はありません。<br>クリアして最初の1位になろう！</li>';
+        return;
+      }
+
+      sorted.slice(0, 12).forEach((row, index) => {
+        const isMe = row.mhj_id === currentMhjId;
+        const li = document.createElement('li');
+        li.className = `flex items-center justify-between px-3 py-2 rounded-lg border ${
+          isMe
+            ? 'bg-amber-950/60 border-amber-400 text-amber-200 font-bold shadow-sm shadow-amber-500/20'
+            : 'bg-slate-950/70 border-slate-800 text-slate-300'
+        }`;
+
+        let medal = `<span class="font-cyber w-5 text-slate-500">${index + 1}</span>`;
+        if (index === 0) medal = `<span class="w-5">🥇</span>`;
+        if (index === 1) medal = `<span class="w-5">🥈</span>`;
+        if (index === 2) medal = `<span class="w-5">🥉</span>`;
+
+        const safeId = String(row.mhj_id || 'MHJ_User').replace(/[<>&"']/g, '');
+        li.innerHTML = `
+          <div class="flex items-center gap-2 truncate">
+            ${medal}
+            <span class="truncate">${safeId}</span>
+            ${isMe ? '<span class="text-[9px] bg-amber-400 text-slate-950 px-1.5 rounded font-black">YOU</span>' : ''}
+          </div>
+          <span class="font-cyber font-bold ${index === 0 ? 'text-amber-400' : 'text-cyan-400'}">${Number(row.time_sec).toFixed(2)}s</span>
+        `;
+        ul.appendChild(li);
+      });
+    }
+
+    // MHJ ID同期ボタン
+    document.getElementById('mhj-sync-btn').addEventListener('click', () => {
+      const val = document.getElementById('mhj-id-input').value.trim();
+      if (!val) {
+        showToast('⚠️ ユーザー名は必ず入力してください！');
+        return;
+      }
+      currentMhjId = val;
+      sessionStartTimeStr = formatDateTimeJP(new Date());
+      localStorage.setItem(LOCAL_MHJ_ID_KEY, currentMhjId);
+      updateMhjAccountUI();
+      reportAndFetchMonitoring();
+      showToast(`MHJユーザー名「${currentMhjId}」で同期しました！`);
+    });
+
+    document.getElementById('switch-account-from-block-btn').addEventListener('click', () => {
+      currentMhjId = '';
+      localStorage.removeItem(LOCAL_MHJ_ID_KEY);
+      updateMhjAccountUI();
+      document.getElementById('blocked-overlay').classList.add('hidden');
+      document.getElementById('start-overlay').classList.remove('hidden');
+    });
+
+    // 認証モーダル制御
+    const authModal = document.getElementById('auth-modal');
+    document.getElementById('open-auth-modal-btn').addEventListener('click', () => authModal.classList.remove('hidden'));
+    document.getElementById('close-auth-modal').addEventListener('click', () => authModal.classList.add('hidden'));
+
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!supabaseClient) return;
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value;
+      const mhjName = document.getElementById('auth-mhj-name').value.trim();
+      const feedback = document.getElementById('auth-feedback');
+
+      if (!mhjName) {
+        feedback.textContent = '⚠️ ログイン時はMHJユーザー名を必ず入力してください。';
+        return;
+      }
+      feedback.textContent = 'MHJサーバーへ認証中...';
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        feedback.textContent = `ログインエラー: ${error.message}`;
+        return;
+      }
+      currentMhjId = mhjName;
+      sessionStartTimeStr = formatDateTimeJP(new Date());
+      localStorage.setItem(LOCAL_MHJ_ID_KEY, currentMhjId);
+      await supabaseClient.auth.updateUser({ data: { mhj_id: mhjName } });
+      updateMhjAccountUI();
+      reportAndFetchMonitoring();
+      feedback.textContent = '';
+      authModal.classList.add('hidden');
+      showToast(`✅ MHJアカウント (${currentMhjId}) でログインしました！`);
+    });
+
+    document.getElementById('signup-btn').addEventListener('click', async () => {
+      if (!supabaseClient) return;
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value;
+      const mhjName = document.getElementById('auth-mhj-name').value.trim();
+      const feedback = document.getElementById('auth-feedback');
+
+      if (!mhjName) {
+        feedback.textContent = '⚠️ 新規登録時はMHJユーザー名を必ず入力してください。';
+        return;
+      }
+      if (!email || password.length < 6) {
+        feedback.textContent = 'メールアドレスと6文字以上のパスワードを入力してください。';
+        return;
+      }
+      feedback.textContent = 'MHJアカウント新規作成中...';
+
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { mhj_id: mhjName } }
+      });
+      if (error) {
+        feedback.textContent = `登録エラー: ${error.message}`;
+        return;
+      }
+      currentMhjId = mhjName;
+      sessionStartTimeStr = formatDateTimeJP(new Date());
+      localStorage.setItem(LOCAL_MHJ_ID_KEY, currentMhjId);
+      updateMhjAccountUI();
+      reportAndFetchMonitoring();
+      feedback.textContent = '登録完了！メール確認が必要な場合は受信箱をご確認ください。';
+      showToast(`🎉 MHJアカウント「${mhjName}」を作成しました！`);
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      showToast('ログアウトしました');
+      authModal.classList.add('hidden');
+    });
+
+    // ==========================================
+    // MHJ 管理者ダッシュボード制御（パスワード保護）
+    // ==========================================
+    const adminModal = document.getElementById('admin-modal');
+    const sqlModal = document.getElementById('sql-modal');
+
+    document.getElementById('open-admin-modal-btn').addEventListener('click', () => {
+      adminModal.classList.remove('hidden');
+      if (isAdminUnlocked) {
+        document.getElementById('admin-login-section').classList.add('hidden');
+        document.getElementById('admin-dashboard-section').classList.remove('hidden');
+        reportAndFetchMonitoring();
+        renderAdminTables();
+      }
+    });
+    document.getElementById('close-admin-modal').addEventListener('click', () => adminModal.classList.add('hidden'));
+
+    document.getElementById('admin-unlock-btn').addEventListener('click', () => {
+      const pass = document.getElementById('admin-password-input').value;
+      const errEl = document.getElementById('admin-auth-error');
+      if (pass === ADMIN_PASS) {
+        isAdminUnlocked = true;
+        errEl.textContent = '';
+        document.getElementById('admin-login-section').classList.add('hidden');
+        document.getElementById('admin-dashboard-section').classList.remove('hidden');
+        reportAndFetchMonitoring();
+        renderAdminTables();
+        showToast('🛡️ MHJ管理者ダッシュボードを解除しました');
+      } else {
+        errEl.textContent = '❌ パスワードが正しくありません。';
+      }
+    });
+
+    function renderAdminTables() {
+      const tbody = document.getElementById('admin-monitor-tbody');
+      tbody.innerHTML = '';
+      if (monitoredSessions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">現在アクティブなプレイヤー記録はありません</td></tr>';
+      } else {
+        monitoredSessions.forEach(sess => {
+          const isBlocked = blockedUsersList.includes(sess.mhj_id) || sess.is_blocked;
+          const safeName = String(sess.mhj_id || '').replace(/[<>&"']/g, '');
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="py-2 px-2 font-bold ${isBlocked ? 'text-rose-400 line-through' : 'text-white'}">${safeName}</td>
+            <td class="py-2 px-2 font-mono text-[11px] text-slate-300">開始: ${sess.started_at || '-'}<br>最終: ${sess.last_seen || '-'}</td>
+            <td class="py-2 px-2 text-cyan-300">${sess.status || '-'}</td>
+            <td class="py-2 px-2 text-right">
+              <button data-target-user="${safeName}" data-action="${isBlocked ? 'unblock' : 'block'}"
+                class="admin-toggle-block-btn px-2.5 py-1 rounded font-bold text-[11px] ${
+                  isBlocked
+                    ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-300'
+                    : 'bg-rose-500/20 border border-rose-400 text-rose-300'
+                }">
+                ${isBlocked ? '解除' : 'ブロック'}
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.admin-toggle-block-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const target = btn.getAttribute('data-target-user');
+            const action = btn.getAttribute('data-action');
+            setUserBlockState(target, action === 'block');
+          });
+        });
+      }
+
+      const blockedContainer = document.getElementById('admin-blocked-list');
+      blockedContainer.innerHTML = '';
+      if (blockedUsersList.length === 0) {
+        blockedContainer.innerHTML = '<span class="text-slate-500">ブロック中のユーザーはいません</span>';
+      } else {
+        blockedUsersList.forEach(u => {
+          const safeU = String(u).replace(/[<>&"']/g, '');
+          const chip = document.createElement('span');
+          chip.className = 'inline-flex items-center gap-1.5 bg-rose-950 border border-rose-500/50 text-rose-200 px-2.5 py-1 rounded-full';
+          chip.innerHTML = `<span>🚫 ${safeU}</span><button data-unblock="${safeU}" class="text-rose-400 hover:text-white font-bold ml-1">✕</button>`;
+          chip.querySelector('button').addEventListener('click', () => setUserBlockState(safeU, false));
+          blockedContainer.appendChild(chip);
+        });
+      }
+    }
+
+    async function setUserBlockState(targetUser, shouldBlock) {
+      if (!targetUser) return;
+      if (shouldBlock) {
+        if (!blockedUsersList.includes(targetUser)) blockedUsersList.push(targetUser);
+      } else {
+        blockedUsersList = blockedUsersList.filter(u => u !== targetUser);
+      }
+      localStorage.setItem(LOCAL_BLOCKS_KEY, JSON.stringify(blockedUsersList));
+
+      if (supabaseClient && isCloudTableReady) {
+        await supabaseClient.from('mhj_sessions').upsert({
+          mhj_id: targetUser,
+          started_at: formatDateTimeJP(new Date()),
+          last_seen: formatDateTimeJP(new Date()),
+          status: shouldBlock ? 'ブロック済み' : '解除済み',
+          is_blocked: shouldBlock
+        }, { onConflict: 'mhj_id' });
+      }
+      checkIfCurrentUserBlocked();
+      renderAdminTables();
+      showToast(shouldBlock ? `🚫 「${targetUser}」をブロックしました` : `✅ 「${targetUser}」のブロックを解除しました`);
+    }
+
+    document.getElementById('admin-add-block-btn').addEventListener('click', () => {
+      const inp = document.getElementById('admin-block-username-input');
+      const val = inp.value.trim();
+      if (!val) return;
+      setUserBlockState(val, true);
+      inp.value = '';
+    });
+
+    document.getElementById('admin-start-event-btn').addEventListener('click', async () => {
+      const title = document.getElementById('admin-event-title').value.trim() || 'MHJ 特別イベント';
+      const eventType = document.getElementById('admin-event-type').value;
+      const payload = {
+        id: 1,
+        is_active: true,
+        title,
+        event_type: eventType,
+        started_at: formatDateTimeJP(new Date())
+      };
+      activeEvent = payload;
+      localStorage.setItem(LOCAL_EVENT_KEY, JSON.stringify(payload));
+      if (supabaseClient && isCloudTableReady) {
+        await supabaseClient.from('mhj_events').upsert(payload, { onConflict: 'id' });
+      }
+      applyLiveEventUI();
+      showToast(`🎉 イベント「${title}」を開催しました！`);
+    });
+
+    document.getElementById('admin-stop-event-btn').addEventListener('click', async () => {
+      const payload = { id: 1, is_active: false, title: '', event_type: '', started_at: '' };
+      activeEvent = payload;
+      localStorage.setItem(LOCAL_EVENT_KEY, JSON.stringify(payload));
+      if (supabaseClient && isCloudTableReady) {
+        await supabaseClient.from('mhj_events').upsert(payload, { onConflict: 'id' });
+      }
+      applyLiveEventUI();
+      showToast('イベントを終了しました');
+    });
+
+    async function resetAllRankings() {
+      localStorage.removeItem(LOCAL_SCORES_KEY);
+      leaderboardData = [];
+      if (supabaseClient && isCloudTableReady) {
+        try {
+          await supabaseClient.from('echo_rankings').delete().neq('mhj_id', '');
+        } catch (err) {
+          console.warn('Cloud ranking reset fallback:', err);
+        }
+      }
+      renderLeaderboard();
+      showToast('🏆 ランキングを初期状態（0件）にリセットしました！');
+    }
+
+    document.getElementById('admin-reset-ranking-btn').addEventListener('click', resetAllRankings);
+
+    // SQL設定モーダル制御
+    document.getElementById('open-sql-modal-btn').addEventListener('click', () => sqlModal.classList.remove('hidden'));
+    document.getElementById('close-sql-modal').addEventListener('click', () => sqlModal.classList.add('hidden'));
+    document.getElementById('copy-sql-btn').addEventListener('click', () => {
+      const text = document.getElementById('sql-code-block').textContent;
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+      showToast('📋 Supabase SQLコードをコピーしました！');
+    });
+
+    // ==========================================
+    // オンライン対戦（1vs1 VERSUS）同期エンジン
+    // ==========================================
+    function seededRandom(seed) {
+      let s = seed % 2147483647;
+      if (s <= 0) s += 2147483646;
+      return function() {
+        s = (s * 16807) % 2147483647;
+        return (s - 1) / 2147483646;
+      };
+    }
+
+    function stringToSeed(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash) + 12345;
+    }
+
+    async function joinVersusMatch() {
+      if (!ensureMhjUsername()) return;
+      if (blockedUsersList.includes(currentMhjId)) {
+        checkIfCurrentUserBlocked();
+        return;
+      }
+
+      const rawRoom = document.getElementById('vs-room-input').value.trim().toUpperCase() || 'MHJ777';
+      vsRoomId = rawRoom;
+      gameMode = 'versus';
+      isVersusMode = true;
+      rivalState = null;
+      lastHandledJammerTimestamp = Date.now();
+      jammerBlindTimer = 0;
+
+      document.getElementById('vs-waiting-status').classList.remove('hidden');
+      document.getElementById('versus-hud-bar').classList.remove('hidden');
+      document.getElementById('vs-room-label').textContent = vsRoomId;
+      document.getElementById('vs-my-name').textContent = currentMhjId;
+      document.getElementById('vs-rival-name').textContent = '相手探索中...';
+
+      stage = 1;
+      totalTime = 0;
+      speedChain = 0;
+      empCount = 1;
+      jammerCount = 1;
+
+      await syncVersusRoomState(true);
+      document.getElementById('vs-waiting-status').classList.add('hidden');
+      document.getElementById('start-overlay').classList.add('hidden');
+      document.getElementById('result-overlay').classList.add('hidden');
+      initStage();
+      reportAndFetchMonitoring();
+      showToast(`⚔️ ルーム「${vsRoomId}」でオンライン対戦を開始！全3ステージ先取で勝利！`);
+    }
+
+    async function syncVersusRoomState(isReset = false) {
+      if (!isVersusMode || !vsRoomId || !currentMhjId) return;
+
+      const myPayload = {
+        room_id: vsRoomId,
+        mhj_id: currentMhjId,
+        stage: isReset ? 1 : stage,
+        x: Math.round(player.x),
+        y: Math.round(player.y),
+        finished: isReset ? false : (gameState === 'CLEAR'),
+        finish_time: isReset ? 0 : parseFloat(totalTime.toFixed(2)),
+        updated_at: new Date().toISOString()
+      };
+
+      if (supabaseClient && isCloudTableReady) {
+        try {
+          await supabaseClient.from('mhj_vs_rooms').upsert(myPayload, { onConflict: 'room_id,mhj_id' });
+          const { data: rows } = await supabaseClient
+            .from('mhj_vs_rooms')
+            .select('*')
+            .eq('room_id', vsRoomId);
+
+          if (rows && rows.length > 0) {
+            const rival = rows.find(r => r.mhj_id !== currentMhjId);
+            handleRivalUpdate(rival);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // ローカル別タブ対戦同期フォールバック
+      const allRooms = JSON.parse(localStorage.getItem(LOCAL_VS_KEY) || '{}');
+      if (!allRooms[vsRoomId]) allRooms[vsRoomId] = {};
+      const prevMine = allRooms[vsRoomId][currentMhjId] || {};
+      allRooms[vsRoomId][currentMhjId] = { ...prevMine, ...myPayload };
+      localStorage.setItem(LOCAL_VS_KEY, JSON.stringify(allRooms));
+
+      const others = Object.values(allRooms[vsRoomId]).filter(r => r.mhj_id !== currentMhjId);
+      handleRivalUpdate(others[0] || null);
+    }
+
+    function handleRivalUpdate(rival) {
+      if (!rival) {
+        document.getElementById('vs-rival-name').textContent = '対戦相手待機中 (同合言葉で参加可)';
+        return;
+      }
+      rivalState = rival;
+      document.getElementById('vs-rival-name').textContent = rival.mhj_id;
+      document.getElementById('vs-rival-stage').textContent = rival.stage;
+
+      // 相手からの妨害ジャマー攻撃受信チェック
+      if (rival.jammer_attack_at && Number(rival.jammer_attack_at) > lastHandledJammerTimestamp) {
+        lastHandledJammerTimestamp = Number(rival.jammer_attack_at);
+        if (gameState === 'PLAYING') {
+          jammerBlindTimer = 4.0;
+          shakeTimer = 0.35;
+          playSound(190, 'sawtooth', 0.45, 0.25, 90);
+          addFloatingText(player.x, player.y - 20, '⚠️ JAMMED BY RIVAL!', '#818cf8');
+          // 偽の敵ゴースト反応を周囲にばらまく
+          for (let i = 0; i < 6; i++) {
+            litPoints.push({
+              x: player.x + (Math.random() - 0.5) * 260,
+              y: player.y + (Math.random() - 0.5) * 260,
+              r: 11,
+              color: '#f43f5e',
+              alpha: 1
+            });
+          }
+        }
+      }
+
+      // 相手が先に3ステージゴールした場合
+      if (rival.finished && gameState === 'PLAYING') {
+        gameState = 'GAMEOVER';
+        playSound(150, 'sawtooth', 0.6, 0.3, 60);
+        document.getElementById('result-title').textContent = 'YOU LOSE...';
+        document.getElementById('result-title').className = 'font-cyber text-3xl sm:text-4xl font-black mb-2 text-rose-500';
+        document.getElementById('result-subtitle').textContent = `ライバル「${rival.mhj_id}」が先にゴールしました (${Number(rival.finish_time).toFixed(2)}s)`;
+        document.getElementById('clear-stats-box').classList.add('hidden');
+        document.getElementById('result-overlay').classList.remove('hidden');
+      }
+    }
+
+    async function sendJammerAttack() {
+      if (jammerCount <= 0) return;
+      jammerCount--;
+      updateHUD();
+      playSound(960, 'square', 0.3, 0.18, 220);
+      addFloatingText(player.x, player.y - 16, 'JAMMER SENT!', '#818cf8');
+
+      if (!isVersusMode) {
+        // ソロ時は周囲の敵を混乱させて足止め
+        enemies.forEach(en => {
+          en.alertTimer = 0;
+          en.targetX = null;
+          en.wanderAngle = Math.random() * Math.PI * 2;
+        });
+        showToast('📡 ノイズジャマーで敵の索敵を撹乱しました！');
+        return;
+      }
+
+      const attackTs = Date.now();
+      if (supabaseClient && isCloudTableReady) {
+        await supabaseClient.from('mhj_vs_rooms').upsert({
+          room_id: vsRoomId,
+          mhj_id: currentMhjId,
+          jammer_attack_at: attackTs,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'room_id,mhj_id' });
+      }
+      const allRooms = JSON.parse(localStorage.getItem(LOCAL_VS_KEY) || '{}');
+      if (!allRooms[vsRoomId]) allRooms[vsRoomId] = {};
+      allRooms[vsRoomId][currentMhjId] = {
+        ...(allRooms[vsRoomId][currentMhjId] || { room_id: vsRoomId, mhj_id: currentMhjId }),
+        jammer_attack_at: attackTs
+      };
+      localStorage.setItem(LOCAL_VS_KEY, JSON.stringify(allRooms));
+      showToast(`⚔️ ${rivalState ? rivalState.mhj_id : '対戦相手'} にノイズ妨害を送信しました！`);
+    }
+
+    document.getElementById('start-vs-btn').addEventListener('click', joinVersusMatch);
+    document.getElementById('leave-vs-btn').addEventListener('click', () => {
+      isVersusMode = false;
+      gameMode = 'solo';
+      vsRoomId = '';
+      rivalState = null;
+      gameState = 'TITLE';
+      document.getElementById('versus-hud-bar').classList.add('hidden');
+      document.getElementById('result-overlay').classList.add('hidden');
+      document.getElementById('start-overlay').classList.remove('hidden');
+      reportAndFetchMonitoring();
+    });
+
+    // ==========================================
+    // 2. Web Audio API リアルタイムシンセサイザー
+    // ==========================================
+    let audioCtx = null;
+    function playSound(freq, type, duration, vol = 0.2, endFreq = null) {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq || freq * 0.5), audioCtx.currentTime + duration);
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // ==========================================
+    // 3. ゲームエンジン本体（5ステージ・新ギミック搭載）
+    // ==========================================
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const wrapper = document.getElementById('canvas-wrapper');
+
+    const LOGICAL_W = 800;
+    const LOGICAL_H = 500;
+
+    function resizeCanvas() {
+      const rect = wrapper.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const MAX_STAGE = 5;
+    let gameState = 'TITLE';
+    let stage = 1;
+    let totalTime = 0;
+    let speedChain = 0;
+    let decoyCount = 2;
+    let empCount = 1;
+    let empFreezeTimer = 0;
+    let shakeTimer = 0;
+    let heartbeatTimer = 0;
+    let lastTimestamp = 0;
+
+    let player = { x: 50, y: 250, r: 7, speed: 2.95, stepTimer: 0, dirX: 1, dirY: 0 };
+    let exit = { x: 740, y: 250, r: 16 };
+    let walls = [];
+    let laserGates = []; // 新ギミック：音波反応・周期レーザーセンサー
+    let crystals = [];
+    let boostOrbs = []; // 新アイテム：ソニックブーツ＆ジャマーチャージ
+    let enemies = [];
+    let ripples = [];
+    let litPoints = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      keys[e.code] = true;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (gameState !== 'PLAYING') {
+          if (gameMode === 'versus') joinVersusMatch();
+          else if (gameMode === 'practice') startPracticeRun();
+          else if (gameMode === 'adventure') startAdventureRun();
+          else startNewRun();
+          return;
+        }
+        triggerWideSonar();
+      }
+      if (gameState === 'PLAYING') {
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') triggerQuietSonar();
+        if (e.code === 'KeyE') triggerDecoy();
+        if (e.code === 'KeyQ') triggerEmpFreeze();
+        if (e.code === 'KeyR') sendJammerAttack();
+        if (e.code === 'KeyT' && gameMode === 'practice') {
+          practicePeek = !practicePeek;
+          showToast(practicePeek ? '👁️ 練習用：地形透視ガイド ON' : '🌑 練習用：地形透視ガイド OFF');
+        }
+      }
+    });
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      gameMode = 'solo';
+      isVersusMode = false;
+      document.getElementById('versus-hud-bar').classList.add('hidden');
+      startNewRun();
+    });
+    document.getElementById('start-practice-btn').addEventListener('click', startPracticeRun);
+    document.getElementById('start-adventure-btn').addEventListener('click', startAdventureRun);
+    document.getElementById('retry-btn').addEventListener('click', () => {
+      if (gameMode === 'versus') joinVersusMatch();
+      else if (gameMode === 'practice') startPracticeRun();
+      else if (gameMode === 'adventure') startAdventureRun();
+      else startNewRun();
+    });
+
+    function bindActionTrigger(el, fn) {
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (gameState === 'PLAYING') fn();
+      }, { passive: false });
+      el.addEventListener('click', () => {
+        if (gameState === 'PLAYING') fn();
+      });
+    }
+
+    bindActionTrigger(document.getElementById('btn-sonar-big'), triggerWideSonar);
+    bindActionTrigger(document.getElementById('btn-sonar-small'), triggerQuietSonar);
+    bindActionTrigger(document.getElementById('btn-decoy'), triggerDecoy);
+    bindActionTrigger(document.getElementById('btn-emp'), triggerEmpFreeze);
+    bindActionTrigger(document.getElementById('btn-jammer'), sendJammerAttack);
+
+    // バーチャルアナログスティック制御（スマホ・タブレット向け）
+    const joyBase = document.getElementById('virtual-joystick-base');
+    const joyKnob = document.getElementById('virtual-joystick-knob');
+    let joyTouchId = null;
+    let joyDirX = 0;
+    let joyDirY = 0;
+
+    function updateJoystickFromTouch(touch) {
+      const rect = joyBase.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const maxRadius = rect.width * 0.38;
+
+      const rawDx = touch.clientX - centerX;
+      const rawDy = touch.clientY - centerY;
+      const dist = Math.hypot(rawDx, rawDy);
+      const clampedDist = Math.min(dist, maxRadius);
+      const angle = Math.atan2(rawDy, rawDx);
+
+      const knobX = dist > 0 ? Math.cos(angle) * clampedDist : 0;
+      const knobY = dist > 0 ? Math.sin(angle) * clampedDist : 0;
+      joyKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+
+      if (dist > 6) {
+        const power = clampedDist / maxRadius;
+        joyDirX = Math.cos(angle) * power;
+        joyDirY = Math.sin(angle) * power;
+      } else {
+        joyDirX = 0;
+        joyDirY = 0;
+      }
+    }
+
+    function resetJoystick() {
+      joyTouchId = null;
+      joyDirX = 0;
+      joyDirY = 0;
+      joyKnob.style.transform = 'translate(0px, 0px)';
+    }
+
+    joyBase.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (joyTouchId === null && e.changedTouches.length > 0) {
+        const t = e.changedTouches[0];
+        joyTouchId = t.identifier;
+        updateJoystickFromTouch(t);
+      }
+    }, { passive: false });
+
+    joyBase.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+          updateJoystickFromTouch(e.changedTouches[i]);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joyBase.addEventListener('touchend', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+          resetJoystick();
+          break;
+        }
+      }
+    });
+    joyBase.addEventListener('touchcancel', resetJoystick);
+
+    // キャンバス直接タッチ操作（スワイプ移動＆タップで大音波）
+    let touchStartX = null;
+    let touchStartY = null;
+    let touchStartTime = 0;
+    let touchDirX = 0;
+    let touchDirY = 0;
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = performance.now();
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (touchStartX === null || e.touches.length === 0) return;
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 12) {
+        touchDirX = dx / dist;
+        touchDirY = dy / dist;
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      const elapsed = performance.now() - touchStartTime;
+      const movedDist = Math.hypot(touchDirX, touchDirY);
+      if (gameState === 'PLAYING' && elapsed < 260 && movedDist === 0) {
+        triggerWideSonar();
+      }
+      touchStartX = null;
+      touchStartY = null;
+      touchDirX = 0;
+      touchDirY = 0;
+    }, { passive: false });
+
+    function triggerWideSonar() {
+      emitRipple(player.x, player.y, 410, '#00ffcc', true);
+      playSound(540, 'sine', 0.55, 0.22, 230);
+    }
+
+    function triggerQuietSonar() {
+      emitRipple(player.x, player.y, 125, '#38bdf8', false);
+      playSound(320, 'sine', 0.2, 0.1, 180);
+    }
+
+    function triggerDecoy() {
+      if (decoyCount <= 0 && gameMode !== 'practice') return;
+      if (gameMode !== 'practice') decoyCount--;
+      updateHUD();
+      const tx = Math.max(40, Math.min(LOGICAL_W - 40, player.x + player.dirX * 200));
+      const ty = Math.max(40, Math.min(LOGICAL_H - 40, player.y + player.dirY * 200));
+      emitRipple(tx, ty, 360, '#e879f9', true);
+      playSound(780, 'square', 0.25, 0.14, 420);
+      addFloatingText(tx, ty, 'DECOY!', '#e879f9');
+    }
+
+    function triggerEmpFreeze() {
+      if (empCount <= 0 && gameMode !== 'practice') return;
+      if (gameMode !== 'practice') empCount--;
+      empFreezeTimer = 3.5;
+      shakeTimer = 0.25;
+      updateHUD();
+      emitRipple(player.x, player.y, 920, '#fbbf24', false);
+      playSound(880, 'sawtooth', 0.85, 0.25, 110);
+      addFloatingText(player.x, player.y - 16, 'EMP FREEZE!!', '#fbbf24');
+    }
+
+    function startPracticeRun() {
+      if (!ensureMhjUsername()) return;
+      if (blockedUsersList.includes(currentMhjId)) {
+        checkIfCurrentUserBlocked();
+        return;
+      }
+      gameMode = 'practice';
+      isVersusMode = false;
+      practicePeek = true;
+      stage = 1;
+      totalTime = 0;
+      speedChain = 0;
+      jammerCount = 99;
+      empCount = 99;
+      speedBoostTimer = 0;
+      jammerBlindTimer = 0;
+      document.getElementById('versus-hud-bar').classList.add('hidden');
+      document.getElementById('start-overlay').classList.add('hidden');
+      document.getElementById('result-overlay').classList.add('hidden');
+      initStage();
+      reportAndFetchMonitoring();
+      showToast('🎯 練習モード開始！ランキングには反映されません（[T]キーで透視切替）');
+    }
+
+    function startAdventureRun() {
+      if (!ensureMhjUsername()) return;
+      if (blockedUsersList.includes(currentMhjId)) {
+        checkIfCurrentUserBlocked();
+        return;
+      }
+      gameMode = 'adventure';
+      isVersusMode = false;
+      stage = 1;
+      totalTime = 0;
+      speedChain = 0;
+      adventureRelics = 0;
+      adventureLogs = [];
+      jammerCount = 2;
+      empCount = 2;
+      speedBoostTimer = 0;
+      jammerBlindTimer = 0;
+      document.getElementById('versus-hud-bar').classList.add('hidden');
+      document.getElementById('start-overlay').classList.add('hidden');
+      document.getElementById('result-overlay').classList.add('hidden');
+      initStage();
+      reportAndFetchMonitoring();
+      showToast('🗺️ 冒険モード出発！全10層の深層遺跡と古代遺物を探索せよ！');
+    }
+
+    function startNewRun() {
+      if (!ensureMhjUsername()) return;
+      if (blockedUsersList.includes(currentMhjId)) {
+        checkIfCurrentUserBlocked();
+        return;
+      }
+      gameMode = 'solo';
+      isVersusMode = false;
+      stage = 1;
+      totalTime = 0;
+      speedChain = 0;
+      jammerCount = 1;
+      speedBoostTimer = 0;
+      jammerBlindTimer = 0;
+      empCount = (activeEvent && activeEvent.is_active && activeEvent.event_type === 'emp_plus') ? 2 : 1;
+      document.getElementById('start-overlay').classList.add('hidden');
+      document.getElementById('result-overlay').classList.add('hidden');
+      initStage();
+      reportAndFetchMonitoring();
+    }
+
+    function initStage() {
+      gameState = 'PLAYING';
+      decoyCount = gameMode === 'practice' ? 99 : 2;
+      if (gameMode === 'practice') {
+        empCount = 99;
+        jammerCount = 99;
+      }
+      empFreezeTimer = 0;
+      speedBoostTimer = 0;
+      relicItem = null;
+      bossEntity = null;
+      updateHUD();
+
+      // 対戦モード時はルームIDとステージ番号から共通マップを生成
+      const rand = isVersusMode ? seededRandom(stringToSeed(`${vsRoomId}_STG_${stage}`)) : Math.random;
+
+      player.x = 50;
+      player.y = 60 + rand() * (LOGICAL_H - 120);
+      exit.x = LOGICAL_W - 55;
+      exit.y = 60 + rand() * (LOGICAL_H - 120);
+
+      walls = [];
+      laserGates = [];
+      crystals = [];
+      boostOrbs = [];
+      enemies = [];
+      ripples = [];
+      litPoints = [];
+      particles = [];
+      floatingTexts = [];
+
+      // 外壁
+      walls.push({ x: 0, y: 0, w: LOGICAL_W, h: 12 });
+      walls.push({ x: 0, y: LOGICAL_H - 12, w: LOGICAL_W, h: 12 });
+      walls.push({ x: 0, y: 0, w: 12, h: LOGICAL_H });
+      walls.push({ x: LOGICAL_W - 12, y: 0, w: 12, h: LOGICAL_H });
+
+      // 障害物壁
+      const wallCount = 8 + stage * 2;
+      for (let i = 0; i < wallCount; i++) {
+        const isVert = rand() > 0.5;
+        const w = isVert ? 14 : 80 + rand() * 100;
+        const h = isVert ? 80 + rand() * 100 : 14;
+        const x = 120 + rand() * (LOGICAL_W - 260);
+        const y = 30 + rand() * (LOGICAL_H - 120);
+        walls.push({ x, y, w, h });
+      }
+
+      // Stage 2以降：周期パルスレーザーセンサー追加
+      if (stage >= 2) {
+        const gateCount = stage - 1;
+        for (let i = 0; i < gateCount; i++) {
+          laserGates.push({
+            x: 220 + i * 160 + rand() * 60,
+            y1: 40 + rand() * 100,
+            y2: LOGICAL_H - 40 - rand() * 100,
+            timer: rand() * 4,
+            active: true
+          });
+        }
+      }
+
+      // ゴールドクリスタル（2個）
+      for (let i = 0; i < 2; i++) {
+        crystals.push({
+          x: 170 + rand() * (LOGICAL_W - 310),
+          y: 50 + rand() * (LOGICAL_H - 100),
+          r: 8,
+          collected: false
+        });
+      }
+
+      // 新アイテム：ソニックブーツ（加速）＆ジャマーチャージ
+      boostOrbs.push({
+        x: 200 + rand() * (LOGICAL_W - 360),
+        y: 60 + rand() * (LOGICAL_H - 120),
+        r: 8,
+        kind: 'speed',
+        collected: false
+      });
+      boostOrbs.push({
+        x: 220 + rand() * (LOGICAL_W - 380),
+        y: 60 + rand() * (LOGICAL_H - 120),
+        r: 8,
+        kind: 'jammer',
+        collected: false
+      });
+
+      // 冒険モード専用：古代遺物（アーティファクト）＆第10層ボス配置
+      if (gameMode === 'adventure') {
+        const relicNames = [
+          '反響の古文書', '星屑の羅針盤', '深淵の共鳴石', '黄金の耳飾り', '封魔の音叉',
+          '蒼穹の結晶核', '影渡りのブーツ', '時空の砂時計', '王家の紋章', 'アビスの心臓'
+        ];
+        relicItem = {
+          x: 240 + rand() * (LOGICAL_W - 380),
+          y: 55 + rand() * (LOGICAL_H - 110),
+          r: 9,
+          name: relicNames[(stage - 1) % relicNames.length],
+          collected: false
+        };
+        if (stage === 10) {
+          bossEntity = {
+            x: LOGICAL_W - 180,
+            y: LOGICAL_H / 2,
+            r: 20,
+            speed: 1.95,
+            pulseTimer: 0
+          };
+          showToast('⚠️ 最終層(B10F)：深淵の守護者「アビスロード」が出現！');
+        }
+      }
+
+      // 敵配置（レッドゴースト＋Stage3からパープルファントム）
+      const enemyCount = 1 + Math.floor(stage * 0.85);
+      const eventSpeedMult = (activeEvent && activeEvent.is_active && activeEvent.event_type === 'nightmare') ? 1.22 : 1.0;
+      for (let i = 0; i < enemyCount; i++) {
+        const isPhantom = stage >= 3 && i === enemyCount - 1;
+        enemies.push({
+          x: 260 + rand() * (LOGICAL_W - 340),
+          y: 50 + rand() * (LOGICAL_H - 100),
+          targetX: null,
+          targetY: null,
+          speed: ((isPhantom ? 1.75 : 1.55) + stage * 0.15) * eventSpeedMult,
+          alertTimer: 0,
+          type: isPhantom ? 'phantom' : 'ghost',
+          warpCooldown: 0
+        });
+      }
+
+      emitRipple(player.x, player.y, 175, '#00ffcc', false);
+    }
+
+    function emitRipple(x, y, maxRadius, color, alertEnemies) {
+      ripples.push({ x, y, radius: 5, maxRadius, color, alpha: 1 });
+      if (alertEnemies) {
+        enemies.forEach(en => {
+          const dist = Math.hypot(en.x - x, en.y - y);
+          if (dist < maxRadius * 1.25) {
+            en.targetX = x;
+            en.targetY = y;
+            en.alertTimer = 180;
+            if (en.type === 'phantom' && en.warpCooldown <= 0 && empFreezeTimer <= 0) {
+              const ang = Math.atan2(y - en.y, x - en.x);
+              en.x += Math.cos(ang) * 65;
+              en.y += Math.sin(ang) * 65;
+              en.warpCooldown = 120;
+              spawnParticles(en.x, en.y, '#c084fc', 12);
+            }
+          }
+        });
+      }
+    }
+
+    function spawnParticles(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 1 + Math.random() * 3;
+        particles.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, alpha: 1, color });
+      }
+    }
+
+    function addFloatingText(x, y, text, color) {
+      floatingTexts.push({ x, y, text, color, alpha: 1 });
+    }
+
+    function checkWallCollision(nx, ny, r) {
+      for (const w of walls) {
+        if (nx + r > w.x && nx - r < w.x + w.w && ny + r > w.y && ny - r < w.y + w.h) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function triggerGameOver(reason) {
+      if (gameMode === 'practice') {
+        playSound(240, 'triangle', 0.3, 0.2, 140);
+        shakeTimer = 0.25;
+        player.x = 50;
+        player.y = LOGICAL_H / 2;
+        addFloatingText(player.x + 20, player.y - 12, 'PRACTICE RESPAWN!', '#34d399');
+        showToast(`🎯 練習モード：${reason}（スタート地点から即復帰）`);
+        return;
+      }
+      playSound(120, 'sawtooth', 0.7, 0.35, 40);
+      shakeTimer = 0.4;
+      speedChain = 0;
+      gameState = 'GAMEOVER';
+      document.getElementById('result-title').textContent = gameMode === 'adventure' ? 'QUEST FAILED...' : 'CAPTURED!';
+      document.getElementById('result-title').className = 'font-cyber text-3xl sm:text-4xl font-black mb-2 text-rose-500';
+      document.getElementById('result-subtitle').textContent = gameMode === 'adventure'
+        ? `${reason}（獲得遺物: ${adventureRelics}/10個）`
+        : reason;
+      document.getElementById('clear-stats-box').classList.add('hidden');
+      document.getElementById('result-overlay').classList.remove('hidden');
+    }
+
+    function updateHUD() {
+      const targetStages = isVersusMode ? 3 : (gameMode === 'adventure' ? 10 : MAX_STAGE);
+      document.getElementById('stage-num').textContent = gameMode === 'adventure' ? `B${stage}F` : stage;
+      document.getElementById('stage-max-label').textContent = `/${targetStages}`;
+      if (isVersusMode) {
+        document.getElementById('vs-my-stage').textContent = stage;
+      }
+      if (gameMode === 'practice') {
+        document.getElementById('chain-display').textContent = 'PRACTICE (NO RANK)';
+      } else if (gameMode === 'adventure') {
+        document.getElementById('chain-display').textContent = `RELIC ${adventureRelics}/10`;
+      } else if (speedBoostTimer > 0) {
+        document.getElementById('chain-display').textContent = `BOOST ${speedBoostTimer.toFixed(1)}s`;
+      } else {
+        document.getElementById('chain-display').textContent = `${speedChain} CHAIN`;
+      }
+      document.getElementById('decoy-count').textContent = gameMode === 'practice' ? '∞' : decoyCount;
+      document.getElementById('emp-count').textContent = gameMode === 'practice' ? '∞' : empCount;
+      document.getElementById('jammer-count').textContent = gameMode === 'practice' ? '∞' : jammerCount;
+    }
+
+    function updateGame(dt) {
+      if (gameState !== 'PLAYING') return;
+
+      totalTime += dt;
+      document.getElementById('timer-display').innerHTML = `${totalTime.toFixed(2).padStart(5, '0')}<span class="text-xs">s</span>`;
+
+      if (empFreezeTimer > 0) empFreezeTimer = Math.max(0, empFreezeTimer - dt);
+      if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
+      if (jammerBlindTimer > 0) jammerBlindTimer = Math.max(0, jammerBlindTimer - dt);
+      if (speedBoostTimer > 0) {
+        speedBoostTimer = Math.max(0, speedBoostTimer - dt);
+        updateHUD();
+      }
+
+      // 対戦中の座標同期（0.5秒間隔）
+      if (isVersusMode) {
+        vsSyncTimer += dt;
+        if (vsSyncTimer >= 0.5) {
+          vsSyncTimer = 0;
+          syncVersusRoomState();
+        }
+      }
+
+      // プレイヤー移動
+      let dx = touchDirX + joyDirX, dy = touchDirY + joyDirY;
+      if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+
+      const currentMoveSpeed = speedBoostTimer > 0 ? player.speed * 1.42 : player.speed;
+
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        dx = (dx / len) * currentMoveSpeed;
+        dy = (dy / len) * currentMoveSpeed;
+        player.dirX = dx / currentMoveSpeed;
+        player.dirY = dy / currentMoveSpeed;
+
+        if (!checkWallCollision(player.x + dx, player.y, player.r)) player.x += dx;
+        if (!checkWallCollision(player.x, player.y + dy, player.r)) player.y += dy;
+
+        player.stepTimer++;
+        if (player.stepTimer > (speedBoostTimer > 0 ? 12 : 18)) {
+          emitRipple(player.x, player.y, speedBoostTimer > 0 ? 88 : 54, speedBoostTimer > 0 ? '#38bdf8' : '#0284c7', false);
+          player.stepTimer = 0;
+        }
+      }
+
+      // レーザーゲート更新＆接触判定
+      laserGates.forEach(lg => {
+        lg.timer += dt;
+        // 3.2秒周期（2.0秒ON / 1.2秒OFF）
+        lg.active = (lg.timer % 3.2) < 2.0;
+        if (lg.active && empFreezeTimer <= 0) {
+          if (Math.abs(player.x - lg.x) < player.r + 3 && player.y >= lg.y1 && player.y <= lg.y2) {
+            triggerGameOver(`Stage ${stage} のレーザーセンサーに触れた！`);
+          }
+        }
+      });
+      // ゴールドクリスタル回収（スピードチェーンボーナス＋イベント倍率）
+      crystals.forEach(c => {
+        if (!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < player.r + c.r + 5) {
+          c.collected = true;
+          const eventMult = (activeEvent && activeEvent.is_active && activeEvent.event_type === 'crystal_x2') ? 2.0 : 1.0;
+          const reduction = (3.0 + speedChain * 0.5) * eventMult;
+          speedChain++;
+          totalTime = Math.max(0, totalTime - reduction);
+          updateHUD();
+          playSound(1046, 'sine', 0.35, 0.25, 1568);
+          spawnParticles(c.x, c.y, '#fbbf24', 15);
+          addFloatingText(c.x, c.y, `-${reduction.toFixed(2)}s!`, '#fbbf24');
+        }
+      });
+
+      // 新アイテム回収（ソニックブーツ / ジャマーチャージ）
+      boostOrbs.forEach(orb => {
+        if (!orb.collected && Math.hypot(player.x - orb.x, player.y - orb.y) < player.r + orb.r + 5) {
+          orb.collected = true;
+          if (orb.kind === 'speed') {
+            speedBoostTimer = 5.0;
+            playSound(1200, 'triangle', 0.3, 0.22, 1800);
+            spawnParticles(orb.x, orb.y, '#38bdf8', 14);
+            addFloatingText(orb.x, orb.y, 'SONIC SPEED!', '#38bdf8');
+          } else {
+            jammerCount++;
+            playSound(740, 'square', 0.25, 0.18, 1100);
+            spawnParticles(orb.x, orb.y, '#818cf8', 14);
+            addFloatingText(orb.x, orb.y, '+1 JAMMER!', '#818cf8');
+          }
+          updateHUD();
+        }
+      });
+
+      // 冒険モード：古代遺物（アーティファクト）回収
+      if (gameMode === 'adventure' && relicItem && !relicItem.collected) {
+        if (Math.hypot(player.x - relicItem.x, player.y - relicItem.y) < player.r + relicItem.r + 6) {
+          relicItem.collected = true;
+          adventureRelics++;
+          adventureLogs.push(`B${stage}F: ${relicItem.name}`);
+          empCount++;
+          decoyCount++;
+          playSound(1320, 'sine', 0.45, 0.28, 1760);
+          spawnParticles(relicItem.x, relicItem.y, '#f59e0b', 18);
+          addFloatingText(relicItem.x, relicItem.y, `RELIC: ${relicItem.name}!`, '#fbbf24');
+          showToast(`✨ 古代遺物「${relicItem.name}」を発見！(EMP&おとり+1)`);
+          updateHUD();
+        }
+      }
+
+      // ゴール到達判定
+      const goalStageTarget = isVersusMode ? 3 : (gameMode === 'adventure' ? 10 : MAX_STAGE);
+      if (Math.hypot(player.x - exit.x, player.y - exit.y) < player.r + exit.r) {
+        playSound(660, 'triangle', 0.5, 0.3, 1320);
+        if (stage < goalStageTarget) {
+          stage++;
+          initStage();
+          if (isVersusMode) syncVersusRoomState();
+          else if (gameMode === 'adventure') {
+            reportAndFetchMonitoring();
+            showToast(`⬇️ 遺跡 B${stage}F へ到達！`);
+          }
+        } else {
+          gameState = 'CLEAR';
+          if (isVersusMode) {
+            syncVersusRoomState();
+            document.getElementById('result-title').textContent = '1vs1 VICTORY!!';
+            document.getElementById('result-title').className = 'font-cyber text-2xl sm:text-4xl font-black mb-2 text-amber-400 neon-text';
+            document.getElementById('result-subtitle').textContent = `ルーム「${vsRoomId}」でライバルに勝利！`;
+            document.getElementById('clear-stats-box').classList.remove('hidden');
+            document.getElementById('final-time-display').textContent = `${totalTime.toFixed(2)}s`;
+            document.getElementById('record-sync-status').textContent = '🏆 オンライン対戦 勝利記録を確定しました！';
+            document.getElementById('result-overlay').classList.remove('hidden');
+          } else if (gameMode === 'practice') {
+            document.getElementById('result-title').textContent = 'PRACTICE COMPLETE!';
+            document.getElementById('result-title').className = 'font-cyber text-2xl sm:text-4xl font-black mb-2 text-emerald-400 neon-text';
+            document.getElementById('result-subtitle').textContent = '練習モード全5ステージ踏破完了！';
+            document.getElementById('clear-stats-box').classList.remove('hidden');
+            document.getElementById('final-time-display').textContent = `${totalTime.toFixed(2)}s`;
+            document.getElementById('record-sync-status').textContent = '🎯 練習モードのため世界ランキングには反映されません';
+            document.getElementById('result-overlay').classList.remove('hidden');
+          } else if (gameMode === 'adventure') {
+            document.getElementById('result-title').textContent = 'ADVENTURE CLEARED!!';
+            document.getElementById('result-title').className = 'font-cyber text-2xl sm:text-4xl font-black mb-2 text-amber-400 neon-text';
+            document.getElementById('result-subtitle').textContent = `深淵遺跡B10F制覇！古代遺物 ${adventureRelics}/10 個回収達成`;
+            document.getElementById('clear-stats-box').classList.remove('hidden');
+            document.getElementById('final-time-display').textContent = `${totalTime.toFixed(2)}s`;
+            document.getElementById('record-sync-status').textContent = adventureRelics === 10
+              ? '👑 真のトレジャーハンター称号獲得！(全遺物コンプリート)'
+              : `🗺️ 発見した遺物: ${adventureLogs.join(' / ') || 'なし'}`;
+            document.getElementById('result-overlay').classList.remove('hidden');
+          } else {
+            document.getElementById('result-title').textContent = 'MISSION COMPLETE!';
+            document.getElementById('result-title').className = 'font-cyber text-2xl sm:text-4xl font-black mb-2 text-amber-400 neon-text';
+            document.getElementById('result-subtitle').textContent = `MHJ ID: ${currentMhjId} 全5ステージ制覇！`;
+            document.getElementById('clear-stats-box').classList.remove('hidden');
+            document.getElementById('final-time-display').textContent = `${totalTime.toFixed(2)}s`;
+            document.getElementById('result-overlay').classList.remove('hidden');
+            submitScoreToMhj(totalTime);
+          }
+        }
+        return;
+      }
+
+      // 音波拡大＆反射処理
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i];
+        r.radius += 6.2;
+        r.alpha = 1 - (r.radius / r.maxRadius);
+
+        if (Math.abs(Math.hypot(exit.x - r.x, exit.y - r.y) - r.radius) < 9) {
+          litPoints.push({ x: exit.x, y: exit.y, r: exit.r, color: '#22c55e', alpha: 1 });
+        }
+        crystals.forEach(c => {
+          if (!c.collected && Math.abs(Math.hypot(c.x - r.x, c.y - r.y) - r.radius) < 9) {
+            litPoints.push({ x: c.x, y: c.y, r: c.r, color: '#fbbf24', alpha: 1 });
+          }
+        });
+        boostOrbs.forEach(orb => {
+          if (!orb.collected && Math.abs(Math.hypot(orb.x - r.x, orb.y - r.y) - r.radius) < 9) {
+            litPoints.push({ x: orb.x, y: orb.y, r: orb.r, color: orb.kind === 'speed' ? '#38bdf8' : '#818cf8', alpha: 1 });
+          }
+        });
+        if (relicItem && !relicItem.collected && Math.abs(Math.hypot(relicItem.x - r.x, relicItem.y - r.y) - r.radius) < 10) {
+          litPoints.push({ x: relicItem.x, y: relicItem.y, r: relicItem.r, color: '#f59e0b', alpha: 1 });
+        }
+        if (bossEntity && Math.abs(Math.hypot(bossEntity.x - r.x, bossEntity.y - r.y) - r.radius) < 16) {
+          litPoints.push({ x: bossEntity.x, y: bossEntity.y, r: bossEntity.r, color: '#ef4444', alpha: 1 });
+        }
+        enemies.forEach(en => {
+          if (Math.abs(Math.hypot(en.x - r.x, en.y - r.y) - r.radius) < 9) {
+            const col = empFreezeTimer > 0 ? '#38bdf8' : (en.type === 'phantom' ? '#c084fc' : '#f43f5e');
+            litPoints.push({ x: en.x, y: en.y, r: 10, color: col, alpha: 1 });
+          }
+        });
+        // レーザーゲートの反射
+        laserGates.forEach(lg => {
+          for (let ly = lg.y1; ly <= lg.y2; ly += 16) {
+            if (Math.abs(Math.hypot(lg.x - r.x, ly - r.y) - r.radius) < 8) {
+              litPoints.push({ x: lg.x, y: ly, r: 3, color: lg.active ? '#f43f5e' : '#475569', alpha: 0.95 });
+            }
+          }
+        });
+        // 壁の反射
+        walls.forEach(w => {
+          for (let wx = w.x; wx <= w.x + w.w; wx += 14) {
+            if (Math.abs(Math.hypot(wx - r.x, w.y - r.y) - r.radius) < 7) litPoints.push({ x: wx, y: w.y, r: 2.5, color: r.color, alpha: 0.9 });
+            if (Math.abs(Math.hypot(wx - r.x, (w.y + w.h) - r.y) - r.radius) < 7) litPoints.push({ x: wx, y: w.y + w.h, r: 2.5, color: r.color, alpha: 0.9 });
+          }
+          for (let wy = w.y; wy <= w.y + w.h; wy += 14) {
+            if (Math.abs(Math.hypot(w.x - r.x, wy - r.y) - r.radius) < 7) litPoints.push({ x: w.x, y: wy, r: 2.5, color: r.color, alpha: 0.9 });
+            if (Math.abs(Math.hypot((w.x + w.w) - r.x, wy - r.y) - r.radius) < 7) litPoints.push({ x: w.x + w.w, y: wy, r: 2.5, color: r.color, alpha: 0.9 });
+          }
+        });
+
+        if (r.radius >= r.maxRadius) ripples.splice(i, 1);
+      }
+
+      for (let i = litPoints.length - 1; i >= 0; i--) {
+        litPoints[i].alpha -= 0.009;
+        if (litPoints[i].alpha <= 0) litPoints.splice(i, 1);
+      }
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].x += particles[i].vx;
+        particles[i].y += particles[i].vy;
+        particles[i].alpha -= 0.03;
+        if (particles[i].alpha <= 0) particles.splice(i, 1);
+      }
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        floatingTexts[i].y -= 0.7;
+        floatingTexts[i].alpha -= 0.016;
+        if (floatingTexts[i].alpha <= 0) floatingTexts.splice(i, 1);
+      }
+
+      // 敵AI更新
+      let minDist = 999;
+      enemies.forEach(en => {
+        if (en.warpCooldown > 0) en.warpCooldown--;
+        const d = Math.hypot(player.x - en.x, player.y - en.y);
+        if (d < minDist) minDist = d;
+
+        if (empFreezeTimer <= 0) {
+          if (d < 80) {
+            en.targetX = player.x;
+            en.targetY = player.y;
+            en.alertTimer = 60;
+          }
+          if (en.alertTimer > 0 && en.targetX !== null) {
+            en.alertTimer--;
+            const ang = Math.atan2(en.targetY - en.y, en.targetX - en.x);
+            en.x += Math.cos(ang) * en.speed;
+            en.y += Math.sin(ang) * en.speed;
+          } else {
+            if (!en.wanderAngle || Math.random() < 0.03) en.wanderAngle = Math.random() * Math.PI * 2;
+            const nx = en.x + Math.cos(en.wanderAngle) * (en.speed * 0.45);
+            const ny = en.y + Math.sin(en.wanderAngle) * (en.speed * 0.45);
+            if (nx > 24 && nx < LOGICAL_W - 24 && ny > 24 && ny < LOGICAL_H - 24) {
+              en.x = nx;
+              en.y = ny;
+            } else {
+              en.wanderAngle += Math.PI;
+            }
+          }
+        }
+
+        if (d < player.r + 9 && empFreezeTimer <= 0) {
+          triggerGameOver(`Stage ${stage} でゴーストに捕捉された…`);
+        }
+      });
+
+      // 冒険モード第10層ボスAI
+      if (gameMode === 'adventure' && bossEntity) {
+        const bd = Math.hypot(player.x - bossEntity.x, player.y - bossEntity.y);
+        if (bd < minDist) minDist = bd;
+        if (empFreezeTimer <= 0) {
+          const ang = Math.atan2(player.y - bossEntity.y, player.x - bossEntity.x);
+          bossEntity.x += Math.cos(ang) * bossEntity.speed;
+          bossEntity.y += Math.sin(ang) * bossEntity.speed;
+          bossEntity.pulseTimer += dt;
+          if (bossEntity.pulseTimer >= 2.6) {
+            bossEntity.pulseTimer = 0;
+            emitRipple(bossEntity.x, bossEntity.y, 230, '#ef4444', false);
+          }
+          if (bd < player.r + bossEntity.r - 3) {
+            triggerGameOver('B10F 深淵の守護者アビスロードに撃破された…');
+          }
+        }
+      }
+    }
+
+    function drawGame() {
+      ctx.save();
+      const scaleX = canvas.width / LOGICAL_W;
+      const scaleY = canvas.height / LOGICAL_H;
+      ctx.scale(scaleX, scaleY);
+
+      if (shakeTimer > 0) {
+        ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+      }
+
+      ctx.fillStyle = '#020408';
+      ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+      // 練習モードの地形透視ガイド描画
+      if (gameMode === 'practice' && practicePeek) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.12)';
+        walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(exit.x, exit.y, exit.r, 0, Math.PI * 2);
+        ctx.stroke();
+        enemies.forEach(en => {
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+          ctx.beginPath();
+          ctx.arc(en.x, en.y, 10, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      // 光の残像描画
+      litPoints.forEach(p => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle = p.color;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // 音波リング描画
+      ripples.forEach(r => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, r.alpha * 0.55);
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // パーティクル描画
+      particles.forEach(pt => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, pt.alpha);
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // プレイヤー描画
+      ctx.save();
+      ctx.fillStyle = speedBoostTimer > 0 ? '#38bdf8' : '#ffffff';
+      ctx.shadowBlur = 14;
+      ctx.shadowColor = speedBoostTimer > 0 ? '#38bdf8' : '#00ffcc';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // オンライン対戦時のライバルゴースト位置（同ステージにいる場合）
+      if (isVersusMode && rivalState && Number(rivalState.stage) === stage) {
+        ctx.save();
+        ctx.globalAlpha = 0.65;
+        ctx.fillStyle = '#fb7185';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(Number(rivalState.x), Number(rivalState.y), 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = 'bold 10px Orbitron, sans-serif';
+        ctx.fillText(rivalState.mhj_id, Number(rivalState.x) - 20, Number(rivalState.y) - 12);
+        ctx.restore();
+      }
+
+      // ジャマー妨害受信時のノイズスクリーン演出
+      if (jammerBlindTimer > 0) {
+        ctx.save();
+        ctx.fillStyle = `rgba(99, 102, 241, ${Math.min(0.28, jammerBlindTimer * 0.08)})`;
+        ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        for (let i = 0; i < 18; i++) {
+          ctx.fillRect(Math.random() * LOGICAL_W, Math.random() * LOGICAL_H, 40 + Math.random() * 90, 2);
+        }
+        ctx.restore();
+      }
+
+      // フローティングテキスト
+      floatingTexts.forEach(ft => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.fillStyle = ft.color;
+        ctx.font = 'bold 14px Orbitron, sans-serif';
+        ctx.fillText(ft.text, ft.x - 25, ft.y);
+        ctx.restore();
+      });
+
+      // ゲームオーバー時の全正体表示
+      if (gameState === 'GAMEOVER') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+        laserGates.forEach(lg => {
+          ctx.strokeStyle = lg.active ? '#f43f5e' : '#475569';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(lg.x, lg.y1);
+          ctx.lineTo(lg.x, lg.y2);
+          ctx.stroke();
+        });
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.arc(exit.x, exit.y, exit.r, 0, Math.PI * 2);
+        ctx.fill();
+        enemies.forEach(en => {
+          ctx.fillStyle = en.type === 'phantom' ? '#c084fc' : '#f43f5e';
+          ctx.beginPath();
+          ctx.arc(en.x, en.y, 10, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      ctx.restore();
+    }
+
+    function mainLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min(0.1, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      updateGame(dt);
+      drawGame();
+      requestAnimationFrame(mainLoop);
+    }
+
+    window.onload = () => {
+      localStorage.removeItem(LOCAL_SCORES_KEY);
+      initSupabaseConnection();
+      requestAnimationFrame(mainLoop);
+    };
+  </script>
+</body>
+</html>
